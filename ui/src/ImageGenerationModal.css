@@ -1,0 +1,302 @@
+/* Image Generation Modal Styles */
+.image-generation-modal {
+  max-width: 95vw;
+  min-width: 900px;
+  max-height: 90vh;
+  width: 1200px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.image-generation-content {
+  display: flex;
+  gap: 2rem;
+  flex: 1;
+  overflow: hidden;
+}
+
+.image-generation-left {
+  flex: 1;
+  padding-right: 1rem;
+  overflow-y: auto;
+  max-height: 70vh;
+}
+
+.image-generation-right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.setting-textarea {
+  flex: 1;
+  padding: 0.5rem;
+  border: 2px solid #e1e5e9;
+  border-radius: 5px;
+  font-size: 0.85rem;
+  background: white;
+  color: #333;
+  transition: border-color 0.2s;
+  resize: vertical;
+  min-height: 60px;
+  font-family: inherit;
+}
+
+.setting-textarea:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.reference-images-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.reference-image-option {
+  cursor: pointer;
+  border: 2px solid #e1e5e9;
+  border-radius: 8px;
+  padding: 0.5rem;
+  text-align: center;
+  transition: all 0.2s;
+  background: white;
+  position: relative; /* Added for button positioning */
+}
+
+.reference-image-option:hover {
+  border-color: #667eea;
+  transform: translateY(-2px);
+}
+
+.reference-image-option:hover .use-image-button {
+  opacity: 1;
+}
+
+.reference-image-option.selected {
+  border-color: #667eea;
+  background: #f0f4ff;
+}
+
+.reference-image {
+  width: 100%;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 4px;
+  margin-bottom: 0.25rem;
+}
+
+.reference-image-placeholder {
+  width: 100%;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f5f5f5;
+  border-radius: 4px;
+  color: #666;
+  font-size: 0.7rem;
+  margin-bottom: 0.25rem;
+}
+
+.reference-label {
+  font-size: 0.7rem;
+  color: #666;
+}
+
+.generate-preview-button {
+  padding: 0.8rem 1.5rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.generate-preview-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.generate-preview-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.preview-area {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.preview-title {
+  margin: 0 0 1rem 0;
+  color: #333;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.preview-container {
+  flex: 1;
+  border: 2px dashed #e1e5e9;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  background: #fafafa;
+  position: relative;
+  overflow: hidden;
+}
+
+.preview-placeholder {
+  text-align: center;
+  color: #666;
+}
+
+.preview-placeholder svg {
+  color: #ccc;
+  margin-bottom: 1rem;
+}
+
+.preview-loading {
+  text-align: center;
+  color: #666;
+}
+
+.preview-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #f0f0f0;
+  border-top: 3px solid #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 1rem;
+}
+
+.preview-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.preview-info {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+  color: white;
+  padding: 1rem 0.5rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+.preview-info p {
+  margin: 0.2rem 0;
+}
+
+.accept-image-button {
+  margin-top: 1rem;
+  padding: 0.8rem 1.5rem;
+  background: linear-gradient(135deg, #06ffa5 0%, #00d4aa 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.accept-image-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(6, 255, 165, 0.4);
+}
+
+.use-image-button {
+  position: absolute;
+  bottom: 0.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #06ffa5 0%, #00d4aa 100%);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.2s;
+  z-index: 10;
+}
+
+.use-image-button:hover {
+  background: linear-gradient(135deg, #00d4aa 0%, #06ffa5 100%);
+  transform: translateX(-50%) scale(1.05);
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Responsive Design for Image Generation Modal */
+@media (max-width: 1024px) {
+  .image-generation-modal {
+    min-width: 800px;
+    width: 90vw;
+  }
+  
+  .image-generation-content {
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .image-generation-left,
+  .image-generation-right {
+    flex: none;
+  }
+  
+  .image-generation-left {
+    padding-right: 0;
+    max-height: none;
+  }
+  
+  .preview-container {
+    min-height: 250px;
+  }
+}
+
+@media (max-width: 768px) {
+  .image-generation-modal {
+    min-width: 95vw;
+    width: 95vw;
+    max-height: 95vh;
+  }
+  
+  .reference-images-grid {
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  }
+  
+  .reference-image,
+  .reference-image-placeholder {
+    height: 50px;
+  }
+}
