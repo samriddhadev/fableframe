@@ -50,7 +50,7 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
             hasAudio: scene.hasAudio,
             hasVideo: scene.hasVideo
         });
-        
+
         // Restore image state
         if (scene.image) {
             console.log(`Scene ${index + 1} - Setting uploaded image:`, scene.image);
@@ -58,7 +58,7 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
         } else {
             setUploadedImage(null);
         }
-        
+
         // Restore audio state
         if (scene.hasAudio && scene.audioUrl) {
             console.log(`Scene ${index + 1} - Restoring audio state`);
@@ -68,7 +68,7 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
             setAudioGenerated(false);
             setGeneratedAudioUrl(null);
         }
-        
+
         // Restore video state
         if (scene.hasVideo && scene.videoUrl) {
             console.log(`Scene ${index + 1} - Restoring video state`);
@@ -191,8 +191,8 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
             if (response.ok) {
                 const result = await response.json();
                 if (result.success) {
-                    const imageUrl = result.filename ? 
-                        `http://localhost:8000/${storyId}/images/${result.filename}` : 
+                    const imageUrl = result.filename ?
+                        `http://localhost:8000/${storyId}/images/${result.filename}` :
                         (result.image_url || `data:image/png;base64,${result.image}`);
                     updateImageGenerationSetting('generatedPreview', imageUrl);
                 } else {
@@ -227,8 +227,8 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
             if (imageGenerationSettings.generatedPreview.includes('/files/images/')) {
                 imageFilename = imageGenerationSettings.generatedPreview.split('/files/images/')[1];
             }
-            onUpdate(index, { 
-                ...scene, 
+            onUpdate(index, {
+                ...scene,
                 image: imageGenerationSettings.generatedPreview,
                 imageFilename: imageFilename
             });
@@ -252,7 +252,7 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
 
         try {
             updateImageGenerationSetting('isGeneratingPrompt', true);
-            
+
             // Get previous scene text for reference
             let previousReference = '';
             if (index > 0 && allScenes && allScenes[index - 1]?.text) {
@@ -279,16 +279,16 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                 }
             } else {
                 // For demo purposes, create a simple visual prompt
-                const sceneType = scene.text.toLowerCase().includes('night') ? 'night scene' : 
-                                 scene.text.toLowerCase().includes('day') ? 'daytime scene' : 'scene';
+                const sceneType = scene.text.toLowerCase().includes('night') ? 'night scene' :
+                    scene.text.toLowerCase().includes('day') ? 'daytime scene' : 'scene';
                 const generatedPrompt = `A cinematic ${sceneType} depicting: ${scene.text.substring(0, 100)}${previousReference ? `. Continuing from previous context: ${previousReference.substring(0, 50)}...` : ''}. High quality, detailed, professional photography style.`;
                 updateImageGenerationSetting('visualPrompt', generatedPrompt);
             }
         } catch (error) {
             console.error('Error generating visual prompt:', error);
             // Fallback to basic prompt generation
-            const sceneType = scene.text.toLowerCase().includes('night') ? 'night scene' : 
-                             scene.text.toLowerCase().includes('day') ? 'daytime scene' : 'scene';
+            const sceneType = scene.text.toLowerCase().includes('night') ? 'night scene' :
+                scene.text.toLowerCase().includes('day') ? 'daytime scene' : 'scene';
             const fallbackPrompt = `A cinematic ${sceneType} depicting: ${scene.text.substring(0, 100)}. High quality, detailed, professional photography style.`;
             updateImageGenerationSetting('visualPrompt', fallbackPrompt);
         } finally {
@@ -351,15 +351,57 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                     break;
                 }
 
-                case 'Static':
-                    // Just scale to ensure compatibility
-                    filter = `scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,fps=${fps}`;
+                case 'Parallax': {
+                    const direction = settings.direction;
+                    switch (direction) {
+                        case 'left-to-right':
+                            filter = `crop=iw*0.8:ih:x=(iw-ow)*t/${duration}:y=0`;
+                            break;
+                        case 'right-to-left':
+                            filter = `crop=iw*0.8:ih:x=(iw-ow)*(1-t/${duration}):y=0`;
+                            break;
+                        case 'top-to-bottom':
+                            filter = `crop=iw:ih*0.8:x=0:y=(ih-oh)*t/${duration}`;
+                            break;
+                        case 'bottom-to-top':
+                            filter = `crop=iw:ih*0.8:x=0:y=(ih-oh)*(1-t/${duration})`;
+                            break;
+                    }
                     break;
+                }
+
+                case 'Cinemagraph': {
+                    const motionIntensity = settings.intensity * 5;
+                    const loopDuration = settings.loopDuration || duration;
+                    switch (settings.motionType) {
+                        case 'subtle-zoom':
+                            filter = `zoompan=z='1+${motionIntensity}/100*sin(2*PI*(t/${loopDuration}))':d=${frames}:fps=${fps}`;
+                            break;
+                        case 'wave':
+                            filter = `crop=iw:ih:x='${motionIntensity}*sin(2*PI*(t/${loopDuration}))':y=0`;
+                            break;
+                        case 'breathe':
+                            filter = `scale=iw*(1+${motionIntensity}/100*sin(2*PI*(t/${loopDuration}))):ih*(1+${motionIntensity}/100*sin(2*PI*(t/${loopDuration})))`;
+                            break;
+                    }
+                    break;
+                }
+
+                case 'Dolly Zoom': {
+                    const fovStart = settings.startFov;
+                    const fovEnd = settings.endFov;
+                    const scaleStart = 50 / fovStart;
+                    const scaleEnd = 50 / fovEnd;
+
+                    filter = `zoompan=z='${scaleStart}+(${scaleEnd}-${scaleStart})*in/${frames}':d=${frames}:fps=${fps}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'`;
+                    break;
+                }
+
+                case 'Static':
+                    return null;
 
                 default:
-                    // Fallback for other animation types
-                    filter = `scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,fps=${fps}`;
-                    break;
+                    return null;
             }
         } catch (error) {
             console.error('Error generating FFmpeg command:', error);
@@ -395,24 +437,24 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                         mimetype: file.type
                     })
                 })
-                .then(response => response.json())
-                .then(result => {
-                    if (result.success) {
-                        const imageUrl = `http://localhost:8000/files/${storyId}/images/${result.filename}`;
-                        setUploadedImage(imageUrl);
-                        onUpdate(index, { ...scene, image: imageUrl, imageFilename: result.filename });
-                        toast.success('Image Uploaded', 'Image uploaded successfully!');
-                    } else {
-                        throw new Error(result.error || 'Upload failed');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error uploading image:', error);
-                    toast.error('Upload Failed', 'Failed to upload image: ' + error.message);
-                    // Fallback: use local base64 data
-                    setUploadedImage(base64Image);
-                    onUpdate(index, { ...scene, image: base64Image });
-                });
+                    .then(response => response.json())
+                    .then(result => {
+                        if (result.success) {
+                            const imageUrl = `http://localhost:8000/files/${storyId}/images/${result.filename}`;
+                            setUploadedImage(imageUrl);
+                            onUpdate(index, { ...scene, image: imageUrl, imageFilename: result.filename });
+                            toast.success('Image Uploaded', 'Image uploaded successfully!');
+                        } else {
+                            throw new Error(result.error || 'Upload failed');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error uploading image:', error);
+                        toast.error('Upload Failed', 'Failed to upload image: ' + error.message);
+                        // Fallback: use local base64 data
+                        setUploadedImage(base64Image);
+                        onUpdate(index, { ...scene, image: base64Image });
+                    });
             };
             reader.readAsDataURL(file);
         }
@@ -451,7 +493,7 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
 
                 if (result.success) {
                     // Use the backend file endpoint for audio
-                    const audioUrl = result.filename ? 
+                    const audioUrl = result.filename ?
                         `http://localhost:8000/files/${storyId}/audios/${result.filename}` :
                         (result.audio_url || `data:audio/mp3;base64,${result.audio_data}`);
                     setGeneratedAudioUrl(audioUrl);
@@ -515,7 +557,7 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
 
                 if (result.success) {
                     setVideoGenerated(true);
-                    const videoUrl = result.filename ? 
+                    const videoUrl = result.filename ?
                         `http://localhost:8000/files/${storyId}/videos/${result.filename}` :
                         (result.video_url || `data:video/mp4;base64,${result.video_data}`);
                     setGeneratedVideoUrl(videoUrl);
@@ -708,7 +750,7 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                                 onClick={() => setShowSoundMixerModal(true)}
                                 title="Sound Mixer (Experimental)"
                                 disabled={!audioGenerated || isGeneratingAudio || isGeneratingVideo || isAnySceneGenerating || isMergingFinalVideo}
-                                style={{ 
+                                style={{
                                     background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                                     position: 'relative',
                                     overflow: 'hidden'
@@ -1181,7 +1223,7 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                                     <div className="setting-group">
                                         <label className="setting-label">Reference from Previous Scenes:</label>
                                         <div className="reference-images-grid">
-                                            <div 
+                                            <div
                                                 className={`reference-image-option ${!imageGenerationSettings.selectedSceneImage ? 'selected' : ''}`}
                                                 onClick={() => updateImageGenerationSetting('selectedSceneImage', null)}
                                             >
@@ -1191,13 +1233,13 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                                             </div>
                                             {allScenes.map((sceneItem, sceneIndex) => (
                                                 sceneItem.image && sceneIndex !== index && sceneItem.storyId === storyId && (
-                                                    <div 
+                                                    <div
                                                         key={sceneIndex}
                                                         className={`reference-image-option ${imageGenerationSettings.selectedSceneImage === sceneItem.id ? 'selected' : ''}`}
                                                         onClick={() => updateImageGenerationSetting('selectedSceneImage', sceneItem.id)}
                                                     >
-                                                        <img 
-                                                            src={sceneItem.image} 
+                                                        <img
+                                                            src={sceneItem.image}
                                                             alt={`Scene ${sceneIndex + 1}`}
                                                             className="reference-image"
                                                         />
@@ -1254,8 +1296,8 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                                             </div>
                                         ) : imageGenerationSettings.generatedPreview ? (
                                             <>
-                                                <img 
-                                                    src={imageGenerationSettings.generatedPreview} 
+                                                <img
+                                                    src={imageGenerationSettings.generatedPreview}
                                                     alt="Generated preview"
                                                     className="preview-image"
                                                 />
@@ -1341,10 +1383,10 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                                 {generatedVideoUrl && <source src={generatedVideoUrl} type="video/mp4" />}
                                 Your browser does not support the video tag.
                             </video>
-                            
+
                             {/* Debug Information */}
-                            <div style={{ 
-                                marginTop: '0.5rem', 
+                            <div style={{
+                                marginTop: '0.5rem',
                                 padding: '0.5rem',
                                 backgroundColor: '#f8f9fa',
                                 borderRadius: '6px',
@@ -1354,10 +1396,10 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                                 <p style={{ margin: '0 0 0.25rem 0' }}>
                                     Preview for: "{scene.text?.substring(0, 50)}..."
                                 </p>
-                                
+
                                 {generatedVideoUrl && (
-                                    <div style={{ 
-                                        marginTop: '0.25rem', 
+                                    <div style={{
+                                        marginTop: '0.25rem',
                                         padding: '0.25rem 0.5rem',
                                         backgroundColor: '#d4edda',
                                         borderRadius: '4px',
@@ -1368,7 +1410,7 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                                         ✅ Video loaded successfully (58.8s, 1280×720) - Click play to watch!
                                     </div>
                                 )}
-                                
+
                                 {generatedVideoUrl && (
                                     <details style={{ marginTop: '0.25rem' }}>
                                         <summary style={{ cursor: 'pointer', fontSize: '0.7rem', color: '#999' }}>
@@ -1381,12 +1423,12 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                                         </div>
                                     </details>
                                 )}
-                                
+
                                 {!generatedVideoUrl && (
-                                    <div style={{ 
-                                        color: '#e74c3c', 
+                                    <div style={{
+                                        color: '#e74c3c',
                                         fontWeight: '500',
-                                        marginTop: '0.25rem' 
+                                        marginTop: '0.25rem'
                                     }}>
                                         ⚠️ No video URL available
                                     </div>
@@ -1469,15 +1511,15 @@ function AppContent() {
     });
     const [isAnySceneGenerating, setIsAnySceneGenerating] = useState(false);
     const [isMergingFinalVideo, setIsMergingFinalVideo] = useState(false);
-    const [selectedVoice, setSelectedVoiceState] = useState(() => 
+    const [selectedVoice, setSelectedVoiceState] = useState(() =>
         loadFromLocalStorage('storyline-studio-selected-voice', 'alloy')
     );
-    
+
     // Debug logging for selectedVoice
     console.log('Current selectedVoice state:', selectedVoice);
-    
-    const [voiceInstructions, setVoiceInstructionsState] = useState(() => 
-        loadFromLocalStorage('storyline-studio-voice-instructions', 
+
+    const [voiceInstructions, setVoiceInstructionsState] = useState(() =>
+        loadFromLocalStorage('storyline-studio-voice-instructions',
             '🎙️ Narration Instruction (Adaptive Delivery)\n\nAccent: Neutral Indian English, clear and grounded.\n\nTone: Serious, but with subtle shifts — reflective at the start, energetic in the middle, then darker toward the end.\n\nMood: Gloomy undertone throughout, but with sparks of energy that echo his fleeting highs.\n\nDelivery Flow (per story beat):\n\nOpening (reflective, steady pace)\n"Interviews, fan messages, and public appearances filled his days."\n→ Calm, matter-of-fact, almost weary.\n\n"Initially, he responded to fans, humble and grateful."\n→ Gentle, softened voice, slower.\n\nRising Admiration (quicker, more engaged)\n"He felt alive, powerful, adored. He reveled in praise, each view and comment inflating his pride. Even small compliments felt like treasures."\n→ Increase pacing slightly, add a touch of brightness in tone — but not joyous, rather intoxicated.\n\nThe High (confident, energetic rhythm)\n"The world seemed to obey him. Music flowed effortlessly. The feeling was intoxicating."\n→ Crisp delivery, medium-fast pace, a hint of wonder — but with a shadow underneath.\n\nThe Shift (slower, darker again)\n"He started imagining bigger dreams, larger stages, more recognition."\n→ Slight pause between phrases, like ambition swelling.\n\n"For a while, life felt perfect, magical, unstoppable."\n→ Deliver with restrained intensity — the pace slows, voice lowers at "unstoppable," foreshadowing collapse.\n\n⚖️ Overall rhythm: Not monotone slow — instead, it rises with his pride and falls back into gloom, mirroring the story arc.'
         )
     );
