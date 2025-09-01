@@ -150,6 +150,8 @@ async def get_file(story_id: str, dir: str, filename: str):
         media_type = "video/mp4"
     elif dir == "audios":
         media_type = "audio/mp3"
+    elif dir == "images":
+        media_type = "image/png"
 
     return FileResponse(
         path=str(file_path),
@@ -161,6 +163,27 @@ async def get_file(story_id: str, dir: str, filename: str):
             "X-Debug-File-Path": str(file_path)
         }
     )
+
+@app.post("/upload/image")
+async def upload_image(request: Request):
+    data = await request.json()
+    story_id = data.get("story_id")
+    scene_id = data.get("scene_id")
+    image = data.get("image")
+    if not story_id or not scene_id or not image:
+        raise HTTPException(status_code=400, detail="story_id, scene_id, and image are required")
+    image_bytes = base64.b64decode(extract_base64_from_data_url(image))
+    data_dir = Path(os.getenv("DATA_DIR", "/story")) / \
+            story_id
+    image_dir = data_dir / "images"
+    image_dir.mkdir(parents=True, exist_ok=True)
+    image_path = image_dir / f"{scene_id}.png"
+    if image_path.exists():
+        os.remove(image_path)
+    with open(image_path, "wb") as img_file:
+        img_file.write(image_bytes)
+    print(f"Image saved to {image_path}")
+    return {"success": True, "filename": f"{scene_id}.png"}
 
 @app.post("/generate/image", response_model=ImageGenerationResponse)
 async def generate_image(request: ImageGenerationRequest):
@@ -260,10 +283,7 @@ async def generate_video(request: VideoGenerationRequest):
     try:
         # Placeholder logic for video generation
         # In a real implementation, you would integrate with video generation services
-        
-        if not request.image:
-            raise HTTPException(
-                status_code=400, detail="Image input is required")
+    
         if not request.story_id:
             raise HTTPException(
                 status_code=400, detail="story_id is required")
@@ -274,11 +294,7 @@ async def generate_video(request: VideoGenerationRequest):
         data_dir = Path(os.getenv("DATA_DIR", "/story")) / \
             request.story_id
 
-        image_bytes = base64.b64decode(extract_base64_from_data_url(request.image))
         image_path = data_dir / "images" / f"{request.scene_id}.png"
-        with open(image_path, "wb") as img_file:
-            img_file.write(image_bytes)
-        print(f"Image saved to {image_path}")
         video_path = data_dir / "videos" / f"{request.scene_id}.mp4"
         audio_path = data_dir / "audios" / f"{request.scene_id}.mp3"
         print(f"Audio path is {audio_path}, exists: {audio_path.exists()}")

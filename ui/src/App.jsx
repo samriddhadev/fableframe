@@ -45,18 +45,40 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
 
     // Restore state from persisted scene data (localStorage)
     useEffect(() => {
+        console.log(`Scene ${index + 1} restoration:`, {
+            hasImage: !!scene.image,
+            hasAudio: scene.hasAudio,
+            hasVideo: scene.hasVideo
+        });
+        
+        // Restore image state
         if (scene.image) {
+            console.log(`Scene ${index + 1} - Setting uploaded image:`, scene.image);
             setUploadedImage(scene.image);
+        } else {
+            setUploadedImage(null);
         }
-        if (scene.hasAudio) {
+        
+        // Restore audio state
+        if (scene.hasAudio && scene.audioUrl) {
+            console.log(`Scene ${index + 1} - Restoring audio state`);
             setAudioGenerated(true);
-            setGeneratedAudioUrl(scene.audioUrl || null);
+            setGeneratedAudioUrl(scene.audioUrl);
+        } else {
+            setAudioGenerated(false);
+            setGeneratedAudioUrl(null);
         }
-        if (scene.hasVideo) {
+        
+        // Restore video state
+        if (scene.hasVideo && scene.videoUrl) {
+            console.log(`Scene ${index + 1} - Restoring video state`);
             setVideoGenerated(true);
-            setGeneratedVideoUrl(scene.videoUrl || null);
+            setGeneratedVideoUrl(scene.videoUrl);
+        } else {
+            setVideoGenerated(false);
+            setGeneratedVideoUrl(null);
         }
-    }, [scene.id, scene.image, scene.hasAudio, scene.hasVideo, scene.audioUrl, scene.videoUrl]);
+    }, [scene]);
 
     const handleTextChange = (e) => {
         onUpdate(index, { ...scene, text: e.target.value });
@@ -169,7 +191,9 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
             if (response.ok) {
                 const result = await response.json();
                 if (result.success) {
-                    const imageUrl = result.image_url || `data:image/png;base64,${result.image}`;
+                    const imageUrl = result.filename ? 
+                        `http://localhost:8000/${storyId}/images/${result.filename}` : 
+                        (result.image_url || `data:image/png;base64,${result.image}`);
                     updateImageGenerationSetting('generatedPreview', imageUrl);
                 } else {
                     throw new Error(result.error || 'Image generation failed');
@@ -198,7 +222,16 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
     const acceptGeneratedImage = () => {
         if (imageGenerationSettings.generatedPreview) {
             setUploadedImage(imageGenerationSettings.generatedPreview);
-            onUpdate(index, { ...scene, image: imageGenerationSettings.generatedPreview });
+            // Extract filename from URL if it's a backend file URL
+            let imageFilename = null;
+            if (imageGenerationSettings.generatedPreview.includes('/files/images/')) {
+                imageFilename = imageGenerationSettings.generatedPreview.split('/files/images/')[1];
+            }
+            onUpdate(index, { 
+                ...scene, 
+                image: imageGenerationSettings.generatedPreview,
+                imageFilename: imageFilename
+            });
             setShowImageGenerationModal(false);
             // Reset the generation settings
             setImageGenerationSettings(prev => ({
@@ -342,10 +375,44 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
     const handleImageUpload = (e) => {
         const file = e.target.files[0];
         if (file) {
+            // Convert image to base64 and upload as JSON
             const reader = new FileReader();
             reader.onload = (e) => {
-                setUploadedImage(e.target.result);
-                onUpdate(index, { ...scene, image: e.target.result });
+                const base64Image = e.target.result;
+                const base64Data = base64Image.split(',')[1]; // Remove data:image/jpeg;base64, prefix
+
+                // Upload image to server as JSON
+                fetch('http://localhost:8000/upload/image', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        story_id: storyId,
+                        scene_id: String(scene.id),
+                        image: base64Data,
+                        filename: file.name,
+                        mimetype: file.type
+                    })
+                })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.success) {
+                        const imageUrl = `http://localhost:8000/files/${storyId}/images/${result.filename}`;
+                        setUploadedImage(imageUrl);
+                        onUpdate(index, { ...scene, image: imageUrl, imageFilename: result.filename });
+                        toast.success('Image Uploaded', 'Image uploaded successfully!');
+                    } else {
+                        throw new Error(result.error || 'Upload failed');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error uploading image:', error);
+                    toast.error('Upload Failed', 'Failed to upload image: ' + error.message);
+                    // Fallback: use local base64 data
+                    setUploadedImage(base64Image);
+                    onUpdate(index, { ...scene, image: base64Image });
+                });
             };
             reader.readAsDataURL(file);
         }
@@ -383,14 +450,17 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                 const result = await response.json();
 
                 if (result.success) {
-                    // Use the returned audio URL or base64 data
-                    const audioUrl = result.audio_url || `data:audio/mp3;base64,${result.audio_data}`;
+                    // Use the backend file endpoint for audio
+                    const audioUrl = result.filename ? 
+                        `http://localhost:8000/files/${storyId}/audios/${result.filename}` :
+                        (result.audio_url || `data:audio/mp3;base64,${result.audio_data}`);
                     setGeneratedAudioUrl(audioUrl);
                     setAudioGenerated(true);
                     onUpdate(index, {
                         ...scene,
                         hasAudio: true,
                         audioUrl: audioUrl,
+                        audioFilename: result.filename,
                         storyId: storyId,
                         audioDuration: result.duration
                     });
@@ -445,12 +515,15 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
 
                 if (result.success) {
                     setVideoGenerated(true);
-                    const videoUrl = result.video_url || `data:video/mp4;base64,${result.video_data}`;
+                    const videoUrl = result.filename ? 
+                        `http://localhost:8000/files/${storyId}/videos/${result.filename}` :
+                        (result.video_url || `data:video/mp4;base64,${result.video_data}`);
                     setGeneratedVideoUrl(videoUrl);
                     onUpdate(index, {
                         ...scene,
                         hasVideo: true,
                         videoUrl: videoUrl,
+                        videoFilename: result.filename,
                         storyId: storyId,
                         videoDuration: result.duration,
                         animationSettings: videoAnimationSettings
@@ -1345,7 +1418,8 @@ function AppContent() {
         try {
             const saved = localStorage.getItem(key);
             if (saved) {
-                return JSON.parse(saved);
+                const parsed = JSON.parse(saved);
+                return parsed;
             }
         } catch (error) {
             console.warn('Error loading from localStorage:', error);
@@ -1362,8 +1436,37 @@ function AppContent() {
         }
     };
 
+    // Helper function to migrate/cleanup scene data
+    const migrateSceneData = (scenes) => {
+        return scenes.map(scene => ({
+            id: scene.id || Date.now(),
+            text: scene.text || '',
+            image: scene.image || null,
+            imageFilename: scene.imageFilename || null,
+            hasAudio: scene.hasAudio || false,
+            hasVideo: scene.hasVideo || false,
+            audioUrl: scene.audioUrl || null,
+            videoUrl: scene.videoUrl || null,
+            audioFilename: scene.audioFilename || null,
+            videoFilename: scene.videoFilename || null,
+            audioDuration: scene.audioDuration || null,
+            videoDuration: scene.videoDuration || null,
+            animationSettings: scene.animationSettings || null,
+            storyId: scene.storyId || null,
+            voice: scene.voice || 'alloy'
+        }));
+    };
+
     // Initialize state with localStorage data
-    const [scenes, setScenesState] = useState(() => loadFromLocalStorage('storyline-studio-scenes', []));
+    const [scenes, setScenesState] = useState(() => {
+        const rawScenes = loadFromLocalStorage('storyline-studio-scenes', []);
+        const migratedScenes = migrateSceneData(rawScenes);
+        // Save the migrated data back to localStorage if it was modified
+        if (JSON.stringify(rawScenes) !== JSON.stringify(migratedScenes)) {
+            saveToLocalStorage('storyline-studio-scenes', migratedScenes);
+        }
+        return migratedScenes;
+    });
     const [isAnySceneGenerating, setIsAnySceneGenerating] = useState(false);
     const [isMergingFinalVideo, setIsMergingFinalVideo] = useState(false);
     const [selectedVoice, setSelectedVoiceState] = useState(() => 
@@ -1469,8 +1572,16 @@ function AppContent() {
             id: Date.now(),
             text: '',
             image: null,
+            imageFilename: null,
             hasAudio: false,
             hasVideo: false,
+            audioUrl: null,
+            videoUrl: null,
+            audioFilename: null,
+            videoFilename: null,
+            audioDuration: null,
+            videoDuration: null,
+            animationSettings: null,
             storyId: storyId,
             voice: selectedVoice
         }]);
