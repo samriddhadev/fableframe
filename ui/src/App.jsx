@@ -315,41 +315,44 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
         try {
             switch (settings.type) {
                 case 'Ken Burns': {
-                    const zoom = settings.direction.includes('zoom');
-                    const pan = settings.direction.includes('pan');
+                    // settings.direction is now a comma-separated string like "zoom-in,pan-left"
+                    const directions = settings.direction;
 
-                    if (zoom) {
-                        const startScale = Math.max(0.1, Math.min(3.0, settings.startScale || 1.0));
-                        const endScale = Math.max(0.1, Math.min(3.0, settings.endScale || 1.1));
+                    const startScale = Math.max(0.1, Math.min(3.0, settings.startScale || 1.0));
+                    const endScale = Math.max(0.1, Math.min(3.0, settings.endScale || 1.1));
+                    const intensity = Math.max(10, Math.min(200, (settings.intensity || 1.0) * 50));
 
-                        // Simplified zoompan filter
-                        filter = `zoompan=z='${startScale}+((${endScale}-${startScale})*in/${frames})':d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1280x720:fps=${fps}`;
-                    } else if (pan) {
-                        const direction = settings.direction.replace('pan-', '');
-                        const intensity = Math.max(10, Math.min(200, (settings.intensity || 1.0) * 50));
-                        const scale = Math.max(0.5, Math.min(2.0, settings.startScale || 1.0));
-                        let xExpr = 'iw/2-(iw/zoom/2)';
-                        let yExpr = 'ih/2-(ih/zoom/2)';
+                    // Default expressions
+                    let zoomExpr = startScale;
+                    let xExpr = 'iw/2-(iw/zoom/2)';
+                    let yExpr = 'ih/2-(ih/zoom/2)';
 
-                        switch (direction) {
-                            case 'left':
-                                xExpr = `iw/2-(iw/zoom/2)-(${intensity}*in/${frames})`;
-                                break;
-                            case 'right':
-                                xExpr = `iw/2-(iw/zoom/2)+(${intensity}*in/${frames})`;
-                                break;
-                            case 'up':
-                                yExpr = `ih/2-(ih/zoom/2)-(${intensity}*in/${frames})`;
-                                break;
-                            case 'down':
-                                yExpr = `ih/2-(ih/zoom/2)+(${intensity}*in/${frames})`;
-                                break;
-                        }
-
-                        filter = `zoompan=z=${scale}:x='${xExpr}':y='${yExpr}':d=${frames}:s=1280x720:fps=${fps}`;
+                    // Zoom
+                    if (directions.includes('zoom-in')) {
+                        zoomExpr = `${startScale}+(${endScale}-${startScale})*in/${frames}`;
+                    } else if (directions.includes('zoom-out')) {
+                        zoomExpr = `${endScale}-(${endScale}-${startScale})*in/${frames}`;
                     }
+
+                    // Pan
+                    if (directions.includes('pan-left')) {
+                        xExpr = `iw/2-(iw/zoom/2)-(${intensity}*in/${frames})`;
+                    }
+                    if (directions.includes('pan-right')) {
+                        xExpr = `iw/2-(iw/zoom/2)+(${intensity}*in/${frames})`;
+                    }
+                    if (directions.includes('pan-up')) {
+                        yExpr = `ih/2-(ih/zoom/2)-(${intensity}*in/${frames})`;
+                    }
+                    if (directions.includes('pan-down')) {
+                        yExpr = `ih/2-(ih/zoom/2)+(${intensity}*in/${frames})`;
+                    }
+
+                    // Build zoompan filter
+                    filter = `zoompan=z='${zoomExpr}':x='${xExpr}':y='${yExpr}':d=1:s=1280x720:fps=${fps}`;
                     break;
                 }
+
 
                 case 'Parallax': {
                     const direction = settings.direction;
@@ -925,8 +928,9 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                                         <label className="setting-label">Direction:</label>
                                         <select
                                             className="setting-select"
+                                            multiple={true}
                                             value={animationSettings.direction}
-                                            onChange={(e) => updateAnimationSetting('direction', e.target.value)}
+                                            onChange={(e) => updateAnimationSetting('direction', Array.from(e.target.selectedOptions, option => option.value))}
                                         >
                                             <option value="zoom-in">Zoom In</option>
                                             <option value="zoom-out">Zoom Out</option>
