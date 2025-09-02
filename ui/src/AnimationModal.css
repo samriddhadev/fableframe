@@ -56,6 +56,38 @@
   font-size: 0.85rem;
 }
 
+/* Dimension Presets */
+.dimension-presets {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.preset-button {
+  padding: 0.4rem 0.8rem;
+  border: 2px solid #e1e5e9;
+  border-radius: 5px;
+  background: white;
+  color: #333;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.preset-button:hover {
+  border-color: #667eea;
+  background: #667eea;
+  color: white;
+  transform: translateY(-1px);
+}
+
+.preset-button:active {
+  transform: translateY(0);
+}
+
 .animation-preview {
   background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
   padding: 0.8rem;

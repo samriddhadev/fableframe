@@ -40,7 +40,9 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
         startScale: 1.0,
         endScale: 1.1,
         xOffset: 0,
-        yOffset: 0
+        yOffset: 0,
+        width: 1280,
+        height: 720
     });
 
     // Restore state from persisted scene data (localStorage)
@@ -94,7 +96,9 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                 startScale: 1.0,
                 endScale: 1.1,
                 xOffset: 0,
-                yOffset: 0
+                yOffset: 0,
+                width: 1280,
+                height: 720
             },
             'Parallax': {
                 type: 'Parallax',
@@ -102,7 +106,9 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                 duration: 5,
                 direction: 'left-to-right',
                 speed: 0.5,
-                layers: 2
+                layers: 2,
+                width: 1280,
+                height: 720
             },
             'Cinemagraph': {
                 type: 'Cinemagraph',
@@ -110,7 +116,9 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                 duration: 5,
                 mask: 'center',
                 motionType: 'subtle-zoom',
-                loopDuration: 3
+                loopDuration: 3,
+                width: 1280,
+                height: 720
             },
             'Dolly Zoom': {
                 type: 'Dolly Zoom',
@@ -118,16 +126,24 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                 duration: 5,
                 startFov: 50,
                 endFov: 80,
-                focusPoint: 'center'
+                focusPoint: 'center',
+                width: 1280,
+                height: 720
             },
             'Static': {
                 type: 'Static',
                 intensity: 1.0,
-                duration: 5
+                duration: 5,
+                width: 1280,
+                height: 720
             }
         };
 
-        setAnimationSettings(defaultSettings[type]);
+        setAnimationSettings({
+            ...defaultSettings[type],
+            width: animationSettings.width,
+            height: animationSettings.height
+        });
     };
 
     const updateAnimationSetting = (key, value) => {
@@ -309,6 +325,8 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
         // ⏱ use audio duration instead of settings.duration
         const duration = scene.audioDuration || 5;
         const frames = Math.floor(duration * fps);
+        const width = settings.width || 1280;
+        const height = settings.height || 720;
 
         let filter = `fps=${fps}`; // default fallback
 
@@ -349,7 +367,7 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                     }
 
                     // Build zoompan filter
-                    filter = `zoompan=z='${zoomExpr}':x='${xExpr}':y='${yExpr}':d=1:s=1280x720:fps=${fps}`;
+                    filter = `zoompan=z='${zoomExpr}':x='${xExpr}':y='${yExpr}':d=1:s=${width}x${height}:fps=${fps}`;
                     break;
                 }
 
@@ -409,7 +427,7 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
         } catch (error) {
             console.error('Error generating FFmpeg command:', error);
             // Safe fallback
-            filter = `scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,fps=${fps}`;
+            filter = `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,fps=${fps}`;
         }
 
         // 🔥 Always append safe scaling to avoid "width/height not divisible by 2" error
@@ -907,6 +925,80 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                                 />
                             </div>
 
+                            {/* Video Dimensions */}
+                            <div className="setting-group">
+                                <label className="setting-label">Width:</label>
+                                <input
+                                    type="number"
+                                    className="setting-input"
+                                    min="480"
+                                    max="3840"
+                                    step="2"
+                                    value={animationSettings.width}
+                                    onChange={(e) => updateAnimationSetting('width', parseInt(e.target.value))}
+                                />
+                            </div>
+
+                            <div className="setting-group">
+                                <label className="setting-label">Height:</label>
+                                <input
+                                    type="number"
+                                    className="setting-input"
+                                    min="360"
+                                    max="2160"
+                                    step="2"
+                                    value={animationSettings.height}
+                                    onChange={(e) => updateAnimationSetting('height', parseInt(e.target.value))}
+                                />
+                            </div>
+
+                            {/* Common Dimension Presets */}
+                            <div className="setting-group">
+                                <label className="setting-label">Common Presets:</label>
+                                <div className="dimension-presets">
+                                    <button
+                                        type="button"
+                                        className="preset-button"
+                                        onClick={() => {
+                                            updateAnimationSetting('width', 1280);
+                                            updateAnimationSetting('height', 720);
+                                        }}
+                                    >
+                                        720p (1280×720)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="preset-button"
+                                        onClick={() => {
+                                            updateAnimationSetting('width', 1920);
+                                            updateAnimationSetting('height', 1080);
+                                        }}
+                                    >
+                                        1080p (1920×1080)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="preset-button"
+                                        onClick={() => {
+                                            updateAnimationSetting('width', 1080);
+                                            updateAnimationSetting('height', 1080);
+                                        }}
+                                    >
+                                        Square (1080×1080)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="preset-button"
+                                        onClick={() => {
+                                            updateAnimationSetting('width', 1080);
+                                            updateAnimationSetting('height', 1920);
+                                        }}
+                                    >
+                                        Portrait (1080×1920)
+                                    </button>
+                                </div>
+                            </div>
+
                             <div className="setting-group">
                                 <label className="setting-label">Intensity:</label>
                                 <input
@@ -1085,7 +1177,8 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                         <div className="animation-preview">
                             <p className="preview-description">
                                 <strong>{animationSettings.type}</strong> animation will be applied to your image.
-                                Duration: {animationSettings.duration}s, Intensity: {animationSettings.intensity}
+                                Duration: {animationSettings.duration}s, Intensity: {animationSettings.intensity}<br/>
+                                Output Resolution: {animationSettings.width}×{animationSettings.height}
                             </p>
 
                             {/* FFmpeg Command Preview */}
