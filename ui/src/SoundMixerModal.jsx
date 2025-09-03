@@ -49,6 +49,7 @@ const SoundMixerModal = ({ show, onClose, scene, index, storyId, generatedAudioU
             url: '',
             startTime: 0, // Start time in seconds
             duration: 5, // Default duration (will be updated when file is loaded)
+            originalFileDuration: null, // Original audio file duration
             volume: 0.8, // Volume (0.0 to 1.0)
             loop: false,
             fadeIn: 0.5, // Fade in duration in seconds
@@ -65,9 +66,48 @@ const SoundMixerModal = ({ show, onClose, scene, index, storyId, generatedAudioU
 
     const updateAudioTrack = (trackId, key, value) => {
         setAudioTracks(prev => {
-            const updatedTracks = prev.map(track =>
-                track.id === trackId ? { ...track, [key]: value } : track
-            );
+            const updatedTracks = prev.map(track => {
+                if (track.id !== trackId) return track;
+                
+                // Make a copy of the track for updates
+                const updatedTrack = { ...track };
+                
+                // Apply the update
+                updatedTrack[key] = value;
+                
+                // Validate start time and ensure it doesn't make end time exceed scene duration
+                if (key === 'startTime') {
+                    // Ensure start time is not negative
+                    updatedTrack.startTime = Math.max(0, updatedTrack.startTime);
+                    
+                    // Ensure start time + duration doesn't exceed scene length by too much
+                    const endTime = updatedTrack.startTime + updatedTrack.duration;
+                    if (endTime > originalAudioDuration + 10) {
+                        // Cap duration to keep end within bounds
+                        updatedTrack.duration = Math.max(0.5, originalAudioDuration + 10 - updatedTrack.startTime);
+                    }
+                }
+                
+                // Validate duration changes
+                if (key === 'duration') {
+                    // Ensure duration is at least 0.5 seconds
+                    updatedTrack.duration = Math.max(0.5, updatedTrack.duration);
+                    
+                    // Check if duration makes end time exceed limits
+                    const endTime = updatedTrack.startTime + updatedTrack.duration;
+                    if (endTime > originalAudioDuration + 10) {
+                        // Two strategies:
+                        // 1. Cap the duration
+                        updatedTrack.duration = Math.max(0.5, originalAudioDuration + 10 - updatedTrack.startTime);
+                        
+                        // 2. Or, we could adjust the start time instead (uncomment if preferred)
+                        // updatedTrack.startTime = Math.max(0, originalAudioDuration + 10 - updatedTrack.duration);
+                    }
+                }
+                
+                return updatedTrack;
+            });
+            
             // Update audio element volume when volume changes
             if (key === 'volume') {
                 // Use setTimeout to ensure DOM is updated
@@ -78,6 +118,7 @@ const SoundMixerModal = ({ show, onClose, scene, index, storyId, generatedAudioU
                     }
                 }, 0);
             }
+            
             return updatedTracks;
         });
     };
@@ -93,12 +134,44 @@ const SoundMixerModal = ({ show, onClose, scene, index, storyId, generatedAudioU
             // Get audio duration
             const audio = new Audio(url);
             audio.addEventListener('loadedmetadata', () => {
-                updateAudioTrack(trackId, 'duration', audio.duration);
+                // Get the current track from state to avoid race conditions
+                setAudioTracks(prev => {
+                    return prev.map(track => {
+                        if (track.id === trackId) {
+                            const fileDuration = audio.duration;
+                            const maxDuration = Math.min(fileDuration, 60); // Cap at 60 seconds max
+                            
+                            // Update duration and ensure start time doesn't cause issues
+                            const updatedTrack = { 
+                                ...track, 
+                                duration: maxDuration,
+                                // Store original file duration as a reference
+                                originalFileDuration: fileDuration
+                            };
+                            
+                            // Check if start time + duration exceeds limits
+                            const endTime = updatedTrack.startTime + updatedTrack.duration;
+                            if (endTime > originalAudioDuration + 10) {
+                                // Try to adjust start time first if possible
+                                if (updatedTrack.duration < originalAudioDuration + 10) {
+                                    updatedTrack.startTime = Math.max(0, originalAudioDuration + 10 - updatedTrack.duration);
+                                } else {
+                                    // If duration is too long, cap it
+                                    updatedTrack.duration = Math.max(0.5, originalAudioDuration + 10 - updatedTrack.startTime);
+                                }
+                            }
+                            
+                            return updatedTrack;
+                        }
+                        return track;
+                    });
+                });
             });
         }
     };
 
     const formatTime = (seconds) => {
+        if (seconds === null || seconds === undefined) return '--:--';
         const mins = Math.floor(seconds / 60);
         const secs = Math.floor(seconds % 60);
         return `${mins}:${secs.toString().padStart(2, '0')}`;
@@ -308,6 +381,14 @@ const SoundMixerModal = ({ show, onClose, scene, index, storyId, generatedAudioU
             console.error('Error accepting mixed audio:', error);
             // Error handling in background - user has already been notified via confirmation
         }
+    };
+
+    // Calculate end time for a track
+    const calculateEndTime = (track) => {
+        if (!track || track.startTime === undefined || track.duration === undefined) {
+            return null;
+        }
+        return track.startTime + track.duration;
     };
 
     if (!show) return null;
@@ -694,7 +775,8 @@ const SoundMixerModal = ({ show, onClose, scene, index, storyId, generatedAudioU
                                                             textAlign: 'center'
                                                         }}>
                                                             <small style={{ color: '#27ae60', fontWeight: '500' }}>
-                                                                ✅ Duration: {formatTime(track.duration)} | Ready to mix!
+                                                                ✅ File Duration: {formatTime(track.originalFileDuration || track.duration)} | 
+                                                                Current End Time: {formatTime(calculateEndTime(track))} | Ready to mix!
                                                             </small>
                                                         </div>
                                                     )}
@@ -712,7 +794,7 @@ const SoundMixerModal = ({ show, onClose, scene, index, storyId, generatedAudioU
                                                         borderRadius: '8px',
                                                         border: '1px solid #e9ecef'
                                                     }}>
-                                                        {/* Start Time */}
+                                                        {/* Start Time & End Time */}
                                                         <div className="control-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '0.5rem' }}>
                                                             <label className="control-label" style={{ 
                                                                 fontSize: '0.9rem', 
@@ -741,6 +823,66 @@ const SoundMixerModal = ({ show, onClose, scene, index, storyId, generatedAudioU
                                                                     }}
                                                                 />
                                                                 <span style={{ fontSize: '0.8rem', color: '#6c757d' }}>seconds</span>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        {/* Duration Control */}
+                                                        <div className="control-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '0.5rem' }}>
+                                                            <label className="control-label" style={{ 
+                                                                fontSize: '0.9rem', 
+                                                                fontWeight: '600',
+                                                                color: '#495057',
+                                                                margin: 0,
+                                                                minWidth: '85px'
+                                                            }}>
+                                                                ⏳ Duration:
+                                                            </label>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                <input
+                                                                    type="number"
+                                                                    min="0.5"
+                                                                    max={60}
+                                                                    step="0.1"
+                                                                    value={track.duration}
+                                                                    onChange={(e) => updateAudioTrack(track.id, 'duration', parseFloat(e.target.value) || 0.5)}
+                                                                    className="time-input"
+                                                                    style={{
+                                                                        width: '80px',
+                                                                        padding: '0.5rem',
+                                                                        border: '1px solid #ced4da',
+                                                                        borderRadius: '6px',
+                                                                        fontSize: '0.9rem'
+                                                                    }}
+                                                                />
+                                                                <span style={{ fontSize: '0.8rem', color: '#6c757d' }}>seconds</span>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        {/* End Time (Calculated) */}
+                                                        <div className="control-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '0.5rem' }}>
+                                                            <label className="control-label" style={{ 
+                                                                fontSize: '0.9rem', 
+                                                                fontWeight: '600',
+                                                                color: '#495057',
+                                                                margin: 0,
+                                                                minWidth: '85px'
+                                                            }}>
+                                                                ⌛ End Time:
+                                                            </label>
+                                                            <div style={{ 
+                                                                display: 'flex', 
+                                                                alignItems: 'center',
+                                                                gap: '0.5rem',
+                                                                padding: '0.5rem',
+                                                                border: '1px solid #e9ecef',
+                                                                borderRadius: '6px',
+                                                                backgroundColor: '#f8f9fa',
+                                                                minWidth: '80px'
+                                                            }}>
+                                                                <span style={{ fontSize: '0.9rem', color: '#495057', fontWeight: '500' }}>
+                                                                    {formatTime(calculateEndTime(track))}
+                                                                </span>
+                                                                <span style={{ fontSize: '0.8rem', color: '#6c757d' }}>({calculateEndTime(track)?.toFixed(1) || '--'} s)</span>
                                                             </div>
                                                         </div>
 
@@ -886,15 +1028,39 @@ const SoundMixerModal = ({ show, onClose, scene, index, storyId, generatedAudioU
                                                     marginBottom: '0.5rem'
                                                 }}>
                                                     <label style={{ fontSize: '0.9rem', fontWeight: '500' }}>Preview:</label>
-                                                    <span style={{
-                                                        fontSize: '0.8rem',
-                                                        color: '#666',
-                                                        background: '#f8f9fa',
-                                                        padding: '0.25rem 0.5rem',
-                                                        borderRadius: '4px'
+                                                    <div style={{
+                                                        display: 'flex',
+                                                        gap: '0.5rem',
+                                                        flexWrap: 'wrap'
                                                     }}>
-                                                        Duration: {formatTime(track.duration)}
-                                                    </span>
+                                                        <span style={{
+                                                            fontSize: '0.8rem',
+                                                            color: '#666',
+                                                            background: '#f8f9fa',
+                                                            padding: '0.25rem 0.5rem',
+                                                            borderRadius: '4px'
+                                                        }}>
+                                                            File Length: {formatTime(track.originalFileDuration || track.duration)}
+                                                        </span>
+                                                        <span style={{
+                                                            fontSize: '0.8rem',
+                                                            color: '#666',
+                                                            background: '#f8f9fa',
+                                                            padding: '0.25rem 0.5rem',
+                                                            borderRadius: '4px'
+                                                        }}>
+                                                            Using: {formatTime(track.duration)}
+                                                        </span>
+                                                        <span style={{
+                                                            fontSize: '0.8rem',
+                                                            color: '#666',
+                                                            background: '#f8f9fa',
+                                                            padding: '0.25rem 0.5rem',
+                                                            borderRadius: '4px'
+                                                        }}>
+                                                            End Time: {formatTime(calculateEndTime(track))}
+                                                        </span>
+                                                    </div>
                                                 </div>
                                                 <audio
                                                     controls

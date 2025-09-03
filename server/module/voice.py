@@ -63,6 +63,10 @@ def mix_audio_tracks(base_audio, processed_tracks, output_file, normalize=True, 
             print(f"Processing overlay track: {track['file_path']} with config: {track['config']}")
             overlay = AudioSegment.from_file(track['file_path'])
             config = track['config']
+
+            if config.get('duration_ms'):
+                overlay = overlay[:config['duration_ms']]
+                print(f"Trimmed overlay to duration: {overlay.duration_seconds} seconds")
             
             # Loop the overlay if needed
             if config.get('loop', False):
