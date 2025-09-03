@@ -519,7 +519,7 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
         // Complete the command with filter complex and output options
         ffmpegCommand += ` -filter_complex "${filterChain}" -map "[output]" -map ${inputs.length}:a`;
         ffmpegCommand += ` -t ${totalDuration} -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k`;
-        ffmpegCommand += ` -pix_fmt yuv420p -shortest -y ${sceneId}_multiframe.mp4`;
+        ffmpegCommand += ` -pix_fmt yuv420p -shortest -y -movflags +faststart ${sceneId}_multiframe.mp4`;
 
         return ffmpegCommand;
     };
@@ -740,6 +740,15 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                         animationSettings: videoAnimationSettings.isMultiFrame ? null : videoAnimationSettings,
                         multiFrameAnimationSettings: videoAnimationSettings.isMultiFrame ? videoAnimationSettings : null
                     };
+
+                    console.log(`Scene ${index + 1} - Video generated successfully:`, {
+                        hasVideo: updatedScene.hasVideo,
+                        videoUrl: !!updatedScene.videoUrl,
+                        isMultiFrame: !!videoAnimationSettings.isMultiFrame,
+                        hasMultiFrameSettings: !!updatedScene.multiFrameAnimationSettings,
+                        hasAnimationSettings: !!updatedScene.animationSettings,
+                        fullUpdatedScene: updatedScene
+                    });
 
                     onUpdate(index, updatedScene);
 
@@ -1264,7 +1273,7 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                                 poster={uploadedImage}
                                 autoPlay={false}
                                 muted={false}
-                                key={generatedVideoUrl + '_' + Date.now()}
+                                key={generatedVideoUrl}
                                 onError={(e) => {
                                     console.error('Video error:', e);
                                     console.error('Video URL:', generatedVideoUrl);
@@ -1279,10 +1288,8 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                                     });
                                 }}
                                 onLoadStart={() => console.log('Video load started')}
-                                onCanPlay={() => {
+                                onCanPlay={(e) => {
                                     console.log('Video can play');
-                                    // Optional: Auto-play when ready (remove autoplay attribute above if you use this)
-                                    // e.target.play().catch(console.log);
                                 }}
                                 onWaiting={() => console.log('Video waiting...')}
                                 onPlay={() => console.log('Video started playing')}
@@ -1379,47 +1386,186 @@ function AppContent() {
             }
         } catch (error) {
             console.warn('Error loading from localStorage:', error);
+            // If parsing fails, clear the corrupted data
+            try {
+                localStorage.removeItem(key);
+                console.log(`Cleared corrupted localStorage key: ${key}`);
+            } catch (clearError) {
+                console.warn('Error clearing localStorage:', clearError);
+            }
         }
         return defaultValue;
+    };
+
+    // Helper function to get localStorage usage info
+    const getLocalStorageUsage = () => {
+        try {
+            let total = 0;
+            for (let key in localStorage) {
+                if (localStorage.hasOwnProperty(key)) {
+                    total += localStorage[key].length + key.length;
+                }
+            }
+            return {
+                used: total,
+                usedMB: (total / (1024 * 1024)).toFixed(2),
+                // Most browsers limit localStorage to 5-10MB
+                percentUsed: ((total / (5 * 1024 * 1024)) * 100).toFixed(1)
+            };
+        } catch (error) {
+            return { used: 0, usedMB: '0', percentUsed: '0' };
+        }
     };
 
     // Helper function to save data to localStorage
     const saveToLocalStorage = (key, data) => {
         try {
-            localStorage.setItem(key, JSON.stringify(data));
+            // For scenes, we need to optimize the data to avoid quota exceeded errors
+            if (key === 'storyline-studio-scenes') {
+                const minimalData = data.map(scene => ({
+                    id: scene.id,
+                    text: scene.text,
+                    hasAudio: scene.hasAudio,
+                    hasVideo: scene.hasVideo,
+                    audioFilename: scene.audioFilename,
+                    videoFilename: scene.videoFilename,
+                    storyId: scene.storyId,
+                    voice: scene.voice,
+                    // Keep only essential URLs (server-hosted files, not data URIs)
+                    audioUrl: scene.audioUrl && !scene.audioUrl.startsWith('data:') ? scene.audioUrl : null,
+                    videoUrl: scene.videoUrl && !scene.videoUrl.startsWith('data:') ? scene.videoUrl : null,
+                    image: scene.image && !scene.image.startsWith('data:') ? scene.image : null,
+                    audioDuration: scene.audioDuration,
+                    videoDuration: scene.videoDuration
+                    // No animation settings or other large data to minimize storage
+                }));
+                
+                const dataString = JSON.stringify(minimalData);
+                console.log(`Saving scenes to localStorage: ${(dataString.length / 1024).toFixed(2)}KB`);
+                localStorage.setItem(key, dataString);
+            } else {
+                localStorage.setItem(key, JSON.stringify(data));
+            }
         } catch (error) {
             console.warn('Error saving to localStorage:', error);
+            if (error.name === 'QuotaExceededError') {
+                // Try to clear some space and retry with minimal data
+                console.warn('localStorage quota exceeded, attempting to save minimal scene data...');
+                try {
+                    if (key === 'storyline-studio-scenes') {
+                        const minimalData = data.map(scene => ({
+                            id: scene.id,
+                            text: scene.text,
+                            hasAudio: scene.hasAudio,
+                            hasVideo: scene.hasVideo,
+                            audioFilename: scene.audioFilename,
+                            videoFilename: scene.videoFilename,
+                            storyId: scene.storyId,
+                            voice: scene.voice,
+                            // Keep only essential URLs (server-hosted files, not data URIs)
+                            audioUrl: scene.audioUrl && !scene.audioUrl.startsWith('data:') ? scene.audioUrl : null,
+                            videoUrl: scene.videoUrl && !scene.videoUrl.startsWith('data:') ? scene.videoUrl : null,
+                            image: scene.image && !scene.image.startsWith('data:') ? scene.image : null,
+                            audioDuration: scene.audioDuration,
+                            videoDuration: scene.videoDuration
+                            // No animation settings or other large data to minimize storage
+                        }));
+                        localStorage.setItem(key, JSON.stringify(minimalData));
+                        console.log('Successfully saved minimal scene data to localStorage');
+                    } else {
+                        localStorage.setItem(key, JSON.stringify(data));
+                    }
+                } catch (retryError) {
+                    console.error('Failed to save even minimal data to localStorage:', retryError);
+                }
+            }
         }
     };
 
     // Helper function to migrate/cleanup scene data
     const migrateSceneData = (scenes) => {
-        return scenes.map(scene => ({
-            id: scene.id || Date.now(),
-            text: scene.text || '',
-            image: scene.image || null,
-            imageFilename: scene.imageFilename || null,
-            hasAudio: scene.hasAudio || false,
-            hasVideo: scene.hasVideo || false,
-            audioUrl: scene.audioUrl || null,
-            videoUrl: scene.videoUrl || null,
-            audioFilename: scene.audioFilename || null,
-            videoFilename: scene.videoFilename || null,
-            audioDuration: scene.audioDuration || null,
-            videoDuration: scene.videoDuration || null,
-            animationSettings: scene.animationSettings || null,
-            storyId: scene.storyId || null,
-            voice: scene.voice || 'alloy'
-        }));
+        return scenes.map((scene, index) => {
+            // Determine if scene has video based on multiple indicators
+            const hasVideoData = !!(
+                scene.hasVideo || 
+                scene.videoUrl || 
+                scene.videoFilename ||
+                scene.multiFrameAnimationSettings ||
+                scene.animationSettings
+            );
+            
+            // Determine if scene has audio based on multiple indicators  
+            const hasAudioData = !!(
+                scene.hasAudio || 
+                scene.audioUrl || 
+                scene.audioFilename
+            );
+
+            console.log(`Migrating Scene ${index + 1}:`, {
+                originalHasVideo: scene.hasVideo,
+                originalVideoUrl: !!scene.videoUrl,
+                originalVideoFilename: !!scene.videoFilename,
+                hasMultiFrameSettings: !!scene.multiFrameAnimationSettings,
+                hasAnimationSettings: !!scene.animationSettings,
+                calculatedHasVideo: hasVideoData,
+                originalHasAudio: scene.hasAudio,
+                calculatedHasAudio: hasAudioData
+            });
+
+            // Reconstruct URLs for server-hosted files if they're missing but filenames exist
+            let audioUrl = scene.audioUrl;
+            let videoUrl = scene.videoUrl;
+            let imageUrl = scene.image;
+
+            if (!audioUrl && scene.audioFilename && scene.storyId) {
+                audioUrl = `http://localhost:8000/files/${scene.storyId}/audios/${scene.audioFilename}`;
+                console.log(`Reconstructed audio URL for scene ${index + 1}:`, audioUrl);
+            }
+
+            if (!videoUrl && scene.videoFilename && scene.storyId) {
+                videoUrl = `http://localhost:8000/files/${scene.storyId}/videos/${scene.videoFilename}`;
+                console.log(`Reconstructed video URL for scene ${index + 1}:`, videoUrl);
+            }
+
+            return {
+                id: scene.id || Date.now(),
+                text: scene.text || '',
+                image: imageUrl,
+                imageFilename: scene.imageFilename || null,
+                hasAudio: hasAudioData,
+                hasVideo: hasVideoData,
+                audioUrl: audioUrl,
+                videoUrl: videoUrl,
+                audioFilename: scene.audioFilename || null,
+                videoFilename: scene.videoFilename || null,
+                audioDuration: scene.audioDuration || null,
+                videoDuration: scene.videoDuration || null,
+                animationSettings: scene.animationSettings || null,
+                multiFrameAnimationSettings: scene.multiFrameAnimationSettings || null,
+                storyId: scene.storyId || null,
+                voice: scene.voice || 'alloy'
+            };
+        });
     };
 
     // Initialize state with localStorage data
     const [scenes, setScenesState] = useState(() => {
+        console.log('Initializing scenes from localStorage...');
+        const usage = getLocalStorageUsage();
+        console.log(`LocalStorage usage: ${usage.usedMB}MB (${usage.percentUsed}%)`);
+        
         const rawScenes = loadFromLocalStorage('storyline-studio-scenes', []);
+        console.log('Raw scenes from localStorage:', rawScenes);
         const migratedScenes = migrateSceneData(rawScenes);
+        console.log('Migrated scenes:', migratedScenes);
+        
         // Save the migrated data back to localStorage if it was modified
         if (JSON.stringify(rawScenes) !== JSON.stringify(migratedScenes)) {
+            console.log('Saving migrated scenes back to localStorage');
             saveToLocalStorage('storyline-studio-scenes', migratedScenes);
+            
+            const newUsage = getLocalStorageUsage();
+            console.log(`LocalStorage usage after migration: ${newUsage.usedMB}MB (${newUsage.percentUsed}%)`);
         }
         return migratedScenes;
     });
@@ -1461,10 +1607,12 @@ function AppContent() {
             // Handle functional updates
             setScenesState(prevScenes => {
                 const updatedScenes = newScenes(prevScenes);
+                console.log('Saving updated scenes to localStorage (functional):', updatedScenes);
                 saveToLocalStorage('storyline-studio-scenes', updatedScenes);
                 return updatedScenes;
             });
         } else {
+            console.log('Saving new scenes to localStorage (direct):', newScenes);
             setScenesState(newScenes);
             saveToLocalStorage('storyline-studio-scenes', newScenes);
         }
@@ -1538,12 +1686,21 @@ function AppContent() {
             audioDuration: null,
             videoDuration: null,
             animationSettings: null,
+            multiFrameAnimationSettings: null,
             storyId: storyId,
             voice: selectedVoice
         }]);
     };
 
     const updateScene = (index, updatedScene) => {
+        console.log(`Updating scene ${index + 1}:`, {
+            hasVideo: updatedScene.hasVideo,
+            hasAudio: updatedScene.hasAudio,
+            videoUrl: !!updatedScene.videoUrl,
+            audioUrl: !!updatedScene.audioUrl,
+            hasMultiFrameSettings: !!updatedScene.multiFrameAnimationSettings,
+            fullScene: updatedScene
+        });
         const newScenes = [...scenes];
         newScenes[index] = updatedScene;
         setScenes(newScenes);

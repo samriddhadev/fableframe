@@ -8,9 +8,11 @@ import os
 import base64
 import re
 import json
+
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
 import uvicorn
@@ -18,6 +20,9 @@ import uvicorn
 from dotenv import load_dotenv
 from fastapi.responses import FileResponse
 load_dotenv()
+
+
+CHUNK_SIZE = 1024 * 1024  # 1MB
 
 # Create FastAPI app instance
 app = FastAPI(
@@ -117,41 +122,63 @@ async def root():
     }
 
 @app.get("/files/{story_id}/{dir}/{filename}")
-async def get_file(story_id: str, dir: str, filename: str):
+async def get_file(request: Request, story_id: str, dir: str, filename: str):
     """
-    Serve a file from the server
-
-    Args:
-        story_id: The ID of the story
-        dir: The directory containing the file
-        filename: The name of the file to serve
-
-    Returns:
-        File response
+    Serve a file with range request support (for video/audio streaming).
     """
     file_path = Path(os.getenv("DATA_DIR", "/story")) / story_id / dir / filename
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
-    if not file_path.is_file():
+    if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
 
+    # Set correct media type
     if dir == "videos":
         media_type = "video/mp4"
     elif dir == "audios":
         media_type = "audio/mp3"
     elif dir == "images":
         media_type = "image/png"
+    else:
+        media_type = "application/octet-stream"
 
-    return FileResponse(
-        path=str(file_path),
-        media_type=media_type,
-        filename=filename,
-        headers={
-            "X-Debug-Story-Id": story_id,
-            "X-Debug-Dir": dir,
-            "X-Debug-File-Path": str(file_path)
+    file_size = file_path.stat().st_size
+    range_header = request.headers.get("range")
+
+    def iterfile(start=0, end=None):
+        with open(file_path, "rb") as f:
+            f.seek(start)
+            remaining = (end - start + 1) if end else None
+            while True:
+                chunk_size = CHUNK_SIZE if not remaining else min(CHUNK_SIZE, remaining)
+                data = f.read(chunk_size)
+                if not data:
+                    break
+                yield data
+                if remaining:
+                    remaining -= len(data)
+                    if remaining <= 0:
+                        break
+
+    # Handle range requests (video streaming)
+    if range_header:
+        _, range_val = range_header.split("=")
+        start_str, end_str = range_val.split("-")
+        start = int(start_str) if start_str else 0
+        end = int(end_str) if end_str else file_size - 1
+        headers = {
+            "Content-Range": f"bytes {start}-{end}/{file_size}",
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(end - start + 1),
+            "Cache-Control": "no-cache"
         }
-    )
+        return StreamingResponse(iterfile(start, end), status_code=206, media_type=media_type, headers=headers)
+
+    # Fallback: full file
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(file_size),
+        "Cache-Control": "no-cache"
+    }
+    return StreamingResponse(iterfile(), media_type=media_type, headers=headers)
 
 @app.post("/upload/image")
 async def upload_image(request: Request):

@@ -10,7 +10,8 @@ from module.util import extract_base64_from_data_url
 
 def create_video_with_ffmpeg_multi_frame(scene_id: str, image_path, frame_images: list[str], audio_path, ffmpeg_command, output_path):
     with tempfile.TemporaryDirectory() as tmpdir:
-        frame_images = [extract_base64_from_data_url(img) for img in frame_images]
+        frame_images = [extract_base64_from_data_url(
+            img) for img in frame_images]
         for idx, img_data in enumerate(frame_images):
             img_path = os.path.join(tmpdir, f"frame_{scene_id}_{idx+1}.png")
             with open(img_path, "wb") as img_file:
@@ -24,7 +25,9 @@ def create_video_with_ffmpeg_multi_frame(scene_id: str, image_path, frame_images
             os.rename(multiframe_path, os.path.join(tmpdir, f"{scene_id}.mp4"))
             shutil.move(os.path.join(tmpdir, f"{scene_id}.mp4"), output_path)
         else:
-            raise FileNotFoundError(f"Expected output file {multiframe_path} was not created by ffmpeg")
+            raise FileNotFoundError(
+                f"Expected output file {multiframe_path} was not created by ffmpeg")
+
 
 def create_video_with_ffmpeg(image_path, audio_path, animation_str, output_path):
     if not os.path.exists(image_path):
@@ -41,13 +44,17 @@ def create_video_with_ffmpeg(image_path, audio_path, animation_str, output_path)
             "-i", audio_path,
             "-vf", animation_str,
             "-c:v", "libx264",
-            "-tune", "stillimage",
+            "-preset", "veryfast",        # replaces -tune stillimage
+            "-profile:v", "high",
+            "-level", "4.0",
+            "-pix_fmt", "yuv420p",
             "-c:a", "aac",
             "-b:a", "192k",
-            "-pix_fmt", "yuv420p",
             "-shortest",
+            "-movflags", "+faststart",    # crucial for browser playback
             output_path
         ]
+
     else:
         # Default command without animation
         command = [
@@ -57,15 +64,20 @@ def create_video_with_ffmpeg(image_path, audio_path, animation_str, output_path)
             "-i", image_path,
             "-i", audio_path,
             "-c:v", "libx264",
-            "-tune", "stillimage",
+            "-preset", "veryfast",     # safer than -tune stillimage
+            "-profile:v", "high",
+            "-level", "4.0",
+            "-pix_fmt", "yuv420p",
             "-c:a", "aac",
             "-b:a", "192k",
-            "-pix_fmt", "yuv420p",
             "-shortest",
+            "-movflags", "+faststart",  # enables streaming in browsers
             output_path
         ]
+
     print(f"Running ffmpeg command: {' '.join(command)}")
     subprocess.run(command, check=True)
+
 
 def needs_normalization(video_path):
     """Check if the video has mismatched audio/video settings."""
@@ -94,6 +106,7 @@ def needs_normalization(video_path):
 
     return False
 
+
 def normalize_video(input_path, output_path):
     subprocess.run([
         "ffmpeg", "-y", "-i", input_path,
@@ -101,6 +114,7 @@ def normalize_video(input_path, output_path):
         "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
         output_path
     ], check=True)
+
 
 def merge_videos(video_paths, output_path):
     fixed_paths = []
