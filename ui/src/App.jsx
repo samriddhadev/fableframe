@@ -4,6 +4,7 @@ import './App.css';
 import './AnimationModal.css';
 import './ImageGenerationModal.css';
 import SoundMixerModal from './SoundMixerModal';
+import MultiFrameAnimationModal from './MultiFrameAnimationModal';
 import { ToastProvider, useToast } from './Toast';
 
 // Scene Component
@@ -36,7 +37,7 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
         type: 'Ken Burns',
         intensity: 1.0,
         duration: 5,
-        direction: 'zoom-in',
+        direction: ['zoom-in'],
         startScale: 1.0,
         endScale: 1.1,
         xOffset: 0,
@@ -44,6 +45,7 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
         width: 1280,
         height: 720
     });
+    const [multiFrameAnimationSettings, setMultiFrameAnimationSettings] = useState(null);
 
     // Restore state from persisted scene data (localStorage)
     useEffect(() => {
@@ -80,74 +82,22 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
             setVideoGenerated(false);
             setGeneratedVideoUrl(null);
         }
+
+        // Restore animation settings
+        if (scene.multiFrameAnimationSettings) {
+            console.log(`Scene ${index + 1} - Restoring multi-frame animation settings`);
+            setMultiFrameAnimationSettings(scene.multiFrameAnimationSettings);
+        } else if (scene.animationSettings) {
+            console.log(`Scene ${index + 1} - Restoring single-frame animation settings`);
+            setAnimationSettings(scene.animationSettings);
+            setMultiFrameAnimationSettings(null);
+        } else {
+            setMultiFrameAnimationSettings(null);
+        }
     }, [scene]);
 
     const handleTextChange = (e) => {
         onUpdate(index, { ...scene, text: e.target.value });
-    };
-
-    const handleAnimationTypeChange = (type) => {
-        const defaultSettings = {
-            'Ken Burns': {
-                type: 'Ken Burns',
-                intensity: 1.0,
-                duration: 5,
-                direction: 'zoom-in',
-                startScale: 1.0,
-                endScale: 1.1,
-                xOffset: 0,
-                yOffset: 0,
-                width: 1280,
-                height: 720
-            },
-            'Parallax': {
-                type: 'Parallax',
-                intensity: 1.0,
-                duration: 5,
-                direction: 'left-to-right',
-                speed: 0.5,
-                layers: 2,
-                width: 1280,
-                height: 720
-            },
-            'Cinemagraph': {
-                type: 'Cinemagraph',
-                intensity: 1.0,
-                duration: 5,
-                mask: 'center',
-                motionType: 'subtle-zoom',
-                loopDuration: 3,
-                width: 1280,
-                height: 720
-            },
-            'Dolly Zoom': {
-                type: 'Dolly Zoom',
-                intensity: 1.0,
-                duration: 5,
-                startFov: 50,
-                endFov: 80,
-                focusPoint: 'center',
-                width: 1280,
-                height: 720
-            },
-            'Static': {
-                type: 'Static',
-                intensity: 1.0,
-                duration: 5,
-                width: 1280,
-                height: 720
-            }
-        };
-
-        setAnimationSettings({
-            ...defaultSettings[type],
-            width: animationSettings.width,
-            height: animationSettings.height
-        });
-    };
-
-    const updateAnimationSetting = (key, value) => {
-        setAnimationSettings(prev => ({ ...prev, [key]: value }));
     };
 
     const updateImageGenerationSetting = (key, value) => {
@@ -320,11 +270,108 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
         }
     };
 
+    const kenBurnsFilterExpression = (animationSettings, duration, width, height, fps) => {
+        const frames = Math.floor(duration * fps);
+
+        const startScale = Math.max(0.1, Math.min(3.0, animationSettings.startScale || 1.0));
+        const endScale = Math.max(0.1, Math.min(3.0, animationSettings.endScale || startScale + 0.1));
+
+        // Intensity: 0 → no pan, 1 → full crop window pan
+        const intensityFactor = Math.min(1, Math.max(0, animationSettings.intensity || 1));
+
+        // Default expressions (centered, no zoom)
+        let zoomExpr = startScale.toString();
+        let xExpr = 'iw/2-(iw/zoom/2)';
+        let yExpr = 'ih/2-(ih/zoom/2)';
+
+        const directions = Array.isArray(animationSettings.direction)
+            ? animationSettings.direction
+            : [animationSettings.direction];
+
+        // ---- Zoom ----
+        if (directions.includes('zoom-in')) {
+            zoomExpr = `${startScale}+(${endScale}-${startScale})*in/${frames}`;
+        } else if (directions.includes('zoom-out')) {
+            zoomExpr = `${startScale}-(${startScale}-${endScale})*in/${frames}`;
+        }
+
+        // ---- Pan ----
+        let xShift = '0';
+        let yShift = '0';
+
+        // Move across the crop window scaled by intensityFactor
+        if (directions.includes('pan-left')) {
+            xShift = `(${width ? 'iw/zoom' : 'iw/zoom'}-${width})*in/${frames}*${intensityFactor}`;
+        }
+        if (directions.includes('pan-right')) {
+            xShift = `-(${width ? 'iw/zoom' : 'iw/zoom'}-${width})*in/${frames}*${intensityFactor}`;
+        }
+        if (directions.includes('pan-up')) {
+            yShift = `(${height ? 'ih/zoom' : 'ih/zoom'}-${height})*in/${frames}*${intensityFactor}`;
+        }
+        if (directions.includes('pan-down')) {
+            yShift = `-(${height ? 'ih/zoom' : 'ih/zoom'}-${height})*in/${frames}*${intensityFactor}`;
+        }
+
+        // Apply shifts to center
+        xExpr = `iw/2-(iw/zoom/2)+${xShift}`;
+        yExpr = `ih/2-(ih/zoom/2)+${yShift}`;
+
+        console.log('Generated expressions:', { zoomExpr, xExpr, yExpr, frames, duration, intensityFactor });
+
+        // Build zoompan filter
+        return `zoompan=z='${zoomExpr}':x='${xExpr}':y='${yExpr}':d=${frames}:s=${width}x${height}:fps=${fps}`;
+    };
+
+    const parallaxFilterExpression = (animationSettings, duration, width, height, fps) => {
+        const direction = animationSettings.direction;
+        const speed = animationSettings.speed || 0.5;
+        const frames = Math.floor(duration * fps);
+        switch (direction) {
+            case 'left-to-right':
+                return `zoompan=z='1':x='iw/2-(iw/zoom/2)-${speed}*in':y='ih/2-(ih/zoom/2)':d=${frames}:s=${width}x${height}:fps=${fps},`;
+            case 'right-to-left':
+                return `zoompan=z='1':x='iw/2-(iw/zoom/2)+${speed}*in':y='ih/2-(ih/zoom/2)':d=${frames}:s=${width}x${height}:fps=${fps},`;
+            case 'top-to-bottom':
+                return `zoompan=z='1':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)-${speed}*in':d=${frames}:s=${width}x${height}:fps=${fps},`;
+            case 'bottom-to-top':
+                return `zoompan=z='1':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)+${speed}*in':d=${frames}:s=${width}x${height}:fps=${fps},`;
+            default:
+                return `zoompan=z='1':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=${width}x${height}:fps=${fps},`;
+        }
+    }
+
+    const cinemagraphFilterExpression = (animationSettings, duration, width, height, fps) => {
+        const motionIntensity = animationSettings.intensity * 5;
+        const loopDuration = animationSettings.loopDuration || duration;
+        const frames = Math.floor(duration * fps);
+        switch (animationSettings.motionType) {
+            case 'subtle-zoom':
+                filter = `zoompan=z='1+${motionIntensity}/100*sin(2*PI*(t/${loopDuration}))':d=${frames}:fps=${fps}`;
+                break;
+            case 'wave':
+                filter = `crop=iw:ih:x='${motionIntensity}*sin(2*PI*(t/${loopDuration}))':y=0`;
+                break;
+            case 'breathe':
+                filter = `scale=iw*(1+${motionIntensity}/100*sin(2*PI*(t/${loopDuration}))):ih*(1+${motionIntensity}/100*sin(2*PI*(t/${loopDuration})))`;
+                break;
+        }
+    }
+
+    const dollyzoomFilterExpression = (animationSettings, duration, width, height, fps) => {
+        const fovStart = animationSettings.startFov;
+        const fovEnd = animationSettings.endFov;
+        const scaleStart = 50 / fovStart;
+        const scaleEnd = 50 / fovEnd;
+        const frames = Math.floor(duration * fps);
+
+        return `zoompan=z='${scaleStart}+(${scaleEnd}-${scaleStart})*in/${frames}':d=${frames}:fps=${fps}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'`;
+    }
+
     const generateFFmpegCommand = (settings) => {
         const fps = 25;
         // ⏱ use audio duration instead of settings.duration
         const duration = scene.audioDuration || 5;
-        const frames = Math.floor(duration * fps);
         const width = settings.width || 1280;
         const height = settings.height || 720;
 
@@ -333,88 +380,19 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
         try {
             switch (settings.type) {
                 case 'Ken Burns': {
-                    // settings.direction is now a comma-separated string like "zoom-in,pan-left"
-                    const directions = settings.direction;
-
-                    const startScale = Math.max(0.1, Math.min(3.0, settings.startScale || 1.0));
-                    const endScale = Math.max(0.1, Math.min(3.0, settings.endScale || 1.1));
-                    const intensity = Math.max(10, Math.min(200, (settings.intensity || 1.0) * 50));
-
-                    // Default expressions
-                    let zoomExpr = startScale;
-                    let xExpr = 'iw/2-(iw/zoom/2)';
-                    let yExpr = 'ih/2-(ih/zoom/2)';
-
-                    // Zoom
-                    if (directions.includes('zoom-in')) {
-                        zoomExpr = `${startScale}+(${endScale}-${startScale})*in/${frames}`;
-                    } else if (directions.includes('zoom-out')) {
-                        zoomExpr = `${endScale}-(${endScale}-${startScale})*in/${frames}`;
-                    }
-
-                    // Pan
-                    if (directions.includes('pan-left')) {
-                        xExpr = `iw/2-(iw/zoom/2)-(${intensity}*in/${frames})`;
-                    }
-                    if (directions.includes('pan-right')) {
-                        xExpr = `iw/2-(iw/zoom/2)+(${intensity}*in/${frames})`;
-                    }
-                    if (directions.includes('pan-up')) {
-                        yExpr = `ih/2-(ih/zoom/2)-(${intensity}*in/${frames})`;
-                    }
-                    if (directions.includes('pan-down')) {
-                        yExpr = `ih/2-(ih/zoom/2)+(${intensity}*in/${frames})`;
-                    }
-
-                    // Build zoompan filter
-                    filter = `zoompan=z='${zoomExpr}':x='${xExpr}':y='${yExpr}':d=1:s=${width}x${height}:fps=${fps}`;
+                    filter = kenBurnsFilterExpression(settings, duration, width, height, fps);
                     break;
                 }
-
-
                 case 'Parallax': {
-                    const direction = settings.direction;
-                    switch (direction) {
-                        case 'left-to-right':
-                            filter = `crop=iw*0.8:ih:x=(iw-ow)*t/${duration}:y=0`;
-                            break;
-                        case 'right-to-left':
-                            filter = `crop=iw*0.8:ih:x=(iw-ow)*(1-t/${duration}):y=0`;
-                            break;
-                        case 'top-to-bottom':
-                            filter = `crop=iw:ih*0.8:x=0:y=(ih-oh)*t/${duration}`;
-                            break;
-                        case 'bottom-to-top':
-                            filter = `crop=iw:ih*0.8:x=0:y=(ih-oh)*(1-t/${duration})`;
-                            break;
-                    }
+                    filter = parallaxFilterExpression(settings, duration, width, height, fps);
                     break;
                 }
-
                 case 'Cinemagraph': {
-                    const motionIntensity = settings.intensity * 5;
-                    const loopDuration = settings.loopDuration || duration;
-                    switch (settings.motionType) {
-                        case 'subtle-zoom':
-                            filter = `zoompan=z='1+${motionIntensity}/100*sin(2*PI*(t/${loopDuration}))':d=${frames}:fps=${fps}`;
-                            break;
-                        case 'wave':
-                            filter = `crop=iw:ih:x='${motionIntensity}*sin(2*PI*(t/${loopDuration}))':y=0`;
-                            break;
-                        case 'breathe':
-                            filter = `scale=iw*(1+${motionIntensity}/100*sin(2*PI*(t/${loopDuration}))):ih*(1+${motionIntensity}/100*sin(2*PI*(t/${loopDuration})))`;
-                            break;
-                    }
+                    filter = cinemagraphFilterExpression(settings, duration, width, height, fps);
                     break;
                 }
-
                 case 'Dolly Zoom': {
-                    const fovStart = settings.startFov;
-                    const fovEnd = settings.endFov;
-                    const scaleStart = 50 / fovStart;
-                    const scaleEnd = 50 / fovEnd;
-
-                    filter = `zoompan=z='${scaleStart}+(${scaleEnd}-${scaleStart})*in/${frames}':d=${frames}:fps=${fps}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'`;
+                    filter = dollyzoomFilterExpression(settings, duration, width, height, fps);
                     break;
                 }
 
@@ -434,6 +412,146 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
         return `${filter},scale=trunc(iw/2)*2:trunc(ih/2)*2`;
     };
 
+    const generateMultiFrameFFmpegCommand = (frames, totalDuration, sceneId) => {
+        const fps = 25;
+        const width = frames[0]?.animation?.width || 1280;
+        const height = frames[0]?.animation?.height || 720;
+
+        // Build input sources
+        let inputs = [];
+        let inputMapping = new Map(); // Map frame index to input index
+
+        // First input is always the scene image
+        inputs.push(`-loop 1 -i ${sceneId}.png`);
+        inputMapping.set(0, 0); // Frame 0 uses input 0
+
+        // Add additional inputs for frames with uploaded images
+        let currentInputIndex = 1;
+        frames.forEach((frame, frameIndex) => {
+            if (frameIndex > 0 && frame.uploadedImage) {
+                inputs.push(`-loop 1 -i frame_${sceneId}_${frameIndex}.png`);
+                inputMapping.set(frameIndex, currentInputIndex);
+                currentInputIndex++;
+            } else if (frameIndex > 0) {
+                // Frame without uploaded image uses scene image (input 0)
+                inputMapping.set(frameIndex, 0);
+            }
+        });
+
+        // Start building the FFmpeg command
+        let ffmpegCommand = `ffmpeg ${inputs.join(' ')}`;
+
+        // Build filter complex
+        let filterChain = '';
+        let videoSegments = [];
+
+        // Create animated video segments for each frame
+        frames.forEach((frame, frameIndex) => {
+            const inputIndex = inputMapping.get(frameIndex);
+            const segmentDuration = frame.duration;
+            const segmentFrames = Math.floor(segmentDuration * fps);
+
+            // Generate the animation filter for this frame
+            let animationFilter = generateFrameAnimationFilter(frame.animation, segmentDuration, width, height, fps);
+
+            // Remove trailing comma if present
+            if (animationFilter.endsWith(',')) {
+                animationFilter = animationFilter.slice(0, -1);
+            }
+
+            // For Ken Burns and other animations that use zoompan, we need to set the duration correctly
+            if (frame.animation.type === 'Ken Burns' || frame.animation.type === 'Parallax' || frame.animation.type === 'Cinemagraph' || frame.animation.type === 'Dolly Zoom') {
+                // Replace d=1 with the correct frame count for the duration
+                animationFilter = animationFilter.replace(/d=1([,:])/, `d=${segmentFrames}$1`);
+                // Create the video segment without tpad (zoompan handles duration)
+                filterChain += `[${inputIndex}:v]${animationFilter}[segment${frameIndex}];`;
+            } else {
+                // For static animations, use tpad to set duration
+                filterChain += `[${inputIndex}:v]${animationFilter},tpad=stop_mode=clone:stop_duration=${segmentDuration}[segment${frameIndex}];`;
+            }
+
+            videoSegments.push(`[segment${frameIndex}]`);
+        });
+
+        // Handle concatenation and transitions
+        if (frames.length === 1) {
+            // Single frame - just use the segment
+            filterChain += `${videoSegments[0]}scale=trunc(iw/2)*2:trunc(ih/2)*2[output]`;
+        } else {
+            // Multiple frames - use concat filter for proper merging
+            // For transitions, we need to use a different approach
+            let hasTransitions = frames.slice(1).some(frame => frame.transition && frame.transition !== '');
+
+            if (hasTransitions) {
+                // Complex approach with transitions - use xfade between adjacent segments
+                let finalOutput = videoSegments[0];
+
+                for (let i = 1; i < frames.length; i++) {
+                    const frame = frames[i];
+                    const currentSegment = videoSegments[i];
+
+                    if (frame.transition && frame.transition !== '') {
+                        const transitionDuration = Math.min(frame.transitionDuration || 0.5, frame.duration / 2);
+                        // Calculate proper offset for the transition
+                        const previousDurations = frames.slice(0, i).reduce((sum, f) => sum + f.duration, 0);
+                        const offset = previousDurations - transitionDuration;
+
+                        filterChain += `${finalOutput}${currentSegment}xfade=transition=${frame.transition}:duration=${transitionDuration}:offset=${offset}[transition${i}];`;
+                        finalOutput = `[transition${i}]`;
+                    } else {
+                        // Simple concatenation for frames without transitions
+                        filterChain += `${finalOutput}${currentSegment}concat=n=2:v=1:a=0[concat${i}];`;
+                        finalOutput = `[concat${i}]`;
+                    }
+                }
+
+                filterChain += `${finalOutput}scale=trunc(iw/2)*2:trunc(ih/2)*2[output]`;
+            } else {
+                // Simple concatenation - no transitions
+                filterChain += `${videoSegments.join('')}concat=n=${frames.length}:v=1:a=0,scale=trunc(iw/2)*2:trunc(ih/2)*2[output]`;
+            }
+        }
+
+        // Add audio if available (assuming audio file exists)
+        const audioInput = `-i ${sceneId}.mp3`;
+        ffmpegCommand = `ffmpeg ${inputs.join(' ')} ${audioInput}`;
+
+        // Complete the command with filter complex and output options
+        ffmpegCommand += ` -filter_complex "${filterChain}" -map "[output]" -map ${inputs.length}:a`;
+        ffmpegCommand += ` -t ${totalDuration} -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k`;
+        ffmpegCommand += ` -pix_fmt yuv420p -shortest -y ${sceneId}_multiframe.mp4`;
+
+        return ffmpegCommand;
+    };
+
+    const generateFrameAnimationFilter = (animationSettings, duration, width, height, fps) => {
+        try {
+            switch (animationSettings.type) {
+                case 'Ken Burns': {
+                    return kenBurnsFilterExpression(animationSettings, duration, width, height, fps) + ',';
+                }
+
+                case 'Parallax': {
+                    return parallaxFilterExpression(animationSettings, duration, width, height, fps) + ',';
+                }
+
+                case 'Cinemagraph': {
+                    return cinemagraphFilterExpression(animationSettings, duration, width, height, fps) + ',';
+                }
+
+                case 'Dolly Zoom': {
+                    return dollyzoomFilterExpression(animationSettings, duration, width, height, fps) + ',';
+                }
+
+                case 'Static':
+                default:
+                    return `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,fps=${fps},`;
+            }
+        } catch (error) {
+            console.error('Error generating frame animation filter:', error);
+            return `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,fps=${fps},`;
+        }
+    };
 
     const handleImageUpload = (e) => {
         const file = e.target.files[0];
@@ -560,17 +678,45 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
             setIsAnySceneGenerating(true); // Block global operations
             setShowAnimationModal(false); // Close modal
 
+            // Prepare the request body based on animation type
+            let requestBody = {
+                story_id: storyId,
+                scene_id: String(scene.id),
+                image: scene.image
+            };
+
+            // Handle multi-frame animations
+            if (videoAnimationSettings.isMultiFrame) {
+                requestBody.animation_type = 'multi-frame';
+                requestBody.frames = videoAnimationSettings.frames.map((frame, index) => ({
+                    ...frame,
+                    // Include uploaded image data for frames that have it
+                    uploadedImageData: index > 0 ? frame.uploadedImageData : null
+                }));
+                requestBody.total_duration = videoAnimationSettings.totalDuration;
+
+                // Generate actual FFmpeg command for server execution
+                const ffmpegCommand = generateMultiFrameFFmpegCommand(
+                    videoAnimationSettings.frames,
+                    videoAnimationSettings.totalDuration,
+                    scene.id
+                );
+                requestBody.ffmpeg_command = ffmpegCommand; // Actual command for server execution
+
+                // Log the generated command for debugging
+                console.log('Generated Multi-Frame FFmpeg Command:', ffmpegCommand);
+            } else {
+                // Single frame animation (legacy)
+                requestBody.animation = generateFFmpegCommand(videoAnimationSettings);
+                requestBody.animation_type = 'single-frame';
+            }
+
             const response = await fetch('http://localhost:8000/generate/video', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    story_id: storyId,
-                    scene_id: String(scene.id),
-                    image: scene.image,
-                    animation: generateFFmpegCommand(videoAnimationSettings)
-                })
+                body: JSON.stringify(requestBody)
             });
 
             if (response.ok) {
@@ -582,18 +728,28 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                         `http://localhost:8000/files/${storyId}/videos/${result.filename}` :
                         (result.video_url || `data:video/mp4;base64,${result.video_data}`);
                     setGeneratedVideoUrl(videoUrl);
-                    onUpdate(index, {
+
+                    // Store the animation settings for future reference
+                    const updatedScene = {
                         ...scene,
                         hasVideo: true,
                         videoUrl: videoUrl,
                         videoFilename: result.filename,
                         storyId: storyId,
                         videoDuration: result.duration,
-                        animationSettings: videoAnimationSettings
-                    });
+                        animationSettings: videoAnimationSettings.isMultiFrame ? null : videoAnimationSettings,
+                        multiFrameAnimationSettings: videoAnimationSettings.isMultiFrame ? videoAnimationSettings : null
+                    };
+
+                    onUpdate(index, updatedScene);
+
+                    const animationType = videoAnimationSettings.isMultiFrame
+                        ? `Multi-frame (${videoAnimationSettings.frames.length} frames)`
+                        : videoAnimationSettings.type;
+
                     toast.success(
                         `Video Generated Successfully! 🎬`,
-                        `Scene ${index + 1} video is ready\nAnimation: ${videoAnimationSettings.type}\nStory ID: ${storyId}`
+                        `Scene ${index + 1} video is ready\nAnimation: ${animationType}\nStory ID: ${storyId}`
                     );
                 } else {
                     throw new Error(result.error || 'Video generation failed');
@@ -610,6 +766,29 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
         } finally {
             setIsGeneratingVideo(false);
             setIsAnySceneGenerating(false); // Unblock global operations
+        }
+    };
+
+    const handleMultiFrameAnimationGenerate = (animationConfig) => {
+        if (animationConfig.isMultiFrame) {
+            // Store the multi-frame settings and trigger video generation
+            setMultiFrameAnimationSettings(animationConfig);
+
+            // Prepare the animation config with uploaded images for the server
+            const configWithImages = {
+                ...animationConfig,
+                frames: animationConfig.frames.map((frame, index) => ({
+                    ...frame,
+                    // Keep the uploaded image data for frames that have it
+                    uploadedImageData: index > 0 ? frame.uploadedImage : null
+                }))
+            };
+
+            generateVideo(configWithImages);
+        } else {
+            // Handle single-frame animation
+            setAnimationSettings(animationConfig);
+            generateVideo(animationConfig);
         }
     };
 
@@ -654,13 +833,13 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                     <div className="scene-header-left">
                         <h3 className="scene-title">Scene {index + 1}</h3>
                         <div className="scene-status-indicators">
-                            <span style={{ color: uploadedImage ? '#4a9eff' : '#ccc', fontSize: '0.8rem', marginRight: '0.5rem' }}>
+                            <span style={{ color: uploadedImage ? '#667eea' : '#ccc', fontSize: '0.8rem', marginRight: '0.5rem' }}>
                                 Image: {uploadedImage ? '✓' : '○'}
                             </span>
-                            <span style={{ color: audioGenerated ? '#06ffa5' : '#ccc', fontSize: '0.8rem', marginRight: '0.5rem' }}>
+                            <span style={{ color: audioGenerated ? '#667eea' : '#ccc', fontSize: '0.8rem', marginRight: '0.5rem' }}>
                                 Audio: {audioGenerated ? '✓' : '○'}
                             </span>
-                            <span style={{ color: videoGenerated ? '#ff6b6b' : '#ccc', fontSize: '0.8rem' }}>
+                            <span style={{ color: videoGenerated ? '#667eea' : '#ccc', fontSize: '0.8rem' }}>
                                 Video: {videoGenerated ? '✓' : '○'}
                             </span>
                         </div>
@@ -812,59 +991,18 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                                     <p className="audio-preview-title">
                                         🎵 Generated Audio Preview:
                                     </p>
-                                    <button
-                                        className="reload-audio-button"
-                                        onClick={() => {
-                                            // Force reload the audio by updating the URL with a cache-busting parameter
-                                            if (generatedAudioUrl) {
-                                                const url = new URL(generatedAudioUrl, window.location.origin);
-                                                url.searchParams.set('t', Date.now());
-                                                setGeneratedAudioUrl(url.toString());
-                                            }
-                                        }}
-                                        title="Reload Audio"
-                                        disabled={!generatedAudioUrl || isGeneratingAudio || isGeneratingVideo || isAnySceneGenerating || isMergingFinalVideo}
-                                        style={{
-                                            padding: '0.25rem',
-                                            backgroundColor: '#4a9eff',
-                                            color: 'white',
-                                            border: 'none',
-                                            borderRadius: '4px',
-                                            cursor: 'pointer',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            opacity: (!generatedAudioUrl || isGeneratingAudio || isGeneratingVideo || isAnySceneGenerating || isMergingFinalVideo) ? 0.5 : 1
-                                        }}
-                                    >
-                                        <RotateCcw size={14} />
-                                    </button>
                                 </div>
                                 <audio
                                     className="audio-player"
                                     controls
                                     preload="metadata"
+                                    key={generatedAudioUrl + '_' + Date.now()}
                                 >
-                                    <source src={generatedAudioUrl} type="audio/mp3" />
+                                    <source src={`${generatedAudioUrl}?t=${Date.now()}`} type="audio/mp3" />
                                     Your browser does not support the audio element.
                                 </audio>
                                 <p className="audio-preview-text">
                                     Preview: "{scene.text?.substring(0, 40)}..."
-                                </p>
-                            </div>
-                        )}
-
-                        {/* Video Preview Info */}
-                        {videoGenerated && generatedVideoUrl && (
-                            <div className="video-preview-container" style={{ marginTop: '1rem' }}>
-                                <p className="video-preview-title">
-                                    🎬 Generated Video Preview:
-                                </p>
-                                <p className="video-preview-text">
-                                    Video ready for: "{scene.text?.substring(0, 40)}..."
-                                </p>
-                                <p style={{ fontSize: '0.8rem', color: '#666', margin: '0.25rem 0 0 0' }}>
-                                    Click "Preview Video" to watch the generated content
                                 </p>
                             </div>
                         )}
@@ -880,337 +1018,16 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                 )}
             </div>
 
-            {/* Animation Settings Modal */}
-            {showAnimationModal && (
-                <div className="modal-overlay" onClick={() => setShowAnimationModal(false)}>
-                    <div className="modal-content animation-modal" onClick={e => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <h3 className="modal-title">🎬 Video Animation Settings - Scene {index + 1}</h3>
-                            <button
-                                className="modal-close"
-                                onClick={() => setShowAnimationModal(false)}
-                            >
-                                <X size={24} />
-                            </button>
-                        </div>
-
-                        <div className="animation-settings">
-                            {/* Animation Type Dropdown */}
-                            <div className="setting-group">
-                                <label className="setting-label">Animation Type:</label>
-                                <select
-                                    className="setting-select"
-                                    value={animationSettings.type}
-                                    onChange={(e) => handleAnimationTypeChange(e.target.value)}
-                                >
-                                    <option value="Ken Burns">Ken Burns (Pan & Zoom)</option>
-                                    <option value="Parallax">Parallax (Layer Movement)</option>
-                                    <option value="Cinemagraph">Cinemagraph (Selective Motion)</option>
-                                    <option value="Dolly Zoom">Dolly Zoom (Focus Pull)</option>
-                                    <option value="Static">Static (No Animation)</option>
-                                </select>
-                            </div>
-
-                            {/* Common Settings */}
-                            <div className="setting-group">
-                                <label className="setting-label">Duration (seconds):</label>
-                                <input
-                                    type="number"
-                                    className="setting-input"
-                                    min="1"
-                                    max="30"
-                                    step="0.5"
-                                    value={animationSettings.duration}
-                                    onChange={(e) => updateAnimationSetting('duration', parseFloat(e.target.value))}
-                                />
-                            </div>
-
-                            {/* Video Dimensions */}
-                            <div className="setting-group">
-                                <label className="setting-label">Width:</label>
-                                <input
-                                    type="number"
-                                    className="setting-input"
-                                    min="480"
-                                    max="3840"
-                                    step="2"
-                                    value={animationSettings.width}
-                                    onChange={(e) => updateAnimationSetting('width', parseInt(e.target.value))}
-                                />
-                            </div>
-
-                            <div className="setting-group">
-                                <label className="setting-label">Height:</label>
-                                <input
-                                    type="number"
-                                    className="setting-input"
-                                    min="360"
-                                    max="2160"
-                                    step="2"
-                                    value={animationSettings.height}
-                                    onChange={(e) => updateAnimationSetting('height', parseInt(e.target.value))}
-                                />
-                            </div>
-
-                            {/* Common Dimension Presets */}
-                            <div className="setting-group">
-                                <label className="setting-label">Common Presets:</label>
-                                <div className="dimension-presets">
-                                    <button
-                                        type="button"
-                                        className="preset-button"
-                                        onClick={() => {
-                                            updateAnimationSetting('width', 1280);
-                                            updateAnimationSetting('height', 720);
-                                        }}
-                                    >
-                                        720p (1280×720)
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="preset-button"
-                                        onClick={() => {
-                                            updateAnimationSetting('width', 1920);
-                                            updateAnimationSetting('height', 1080);
-                                        }}
-                                    >
-                                        1080p (1920×1080)
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="preset-button"
-                                        onClick={() => {
-                                            updateAnimationSetting('width', 1080);
-                                            updateAnimationSetting('height', 1080);
-                                        }}
-                                    >
-                                        Square (1080×1080)
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="preset-button"
-                                        onClick={() => {
-                                            updateAnimationSetting('width', 1080);
-                                            updateAnimationSetting('height', 1920);
-                                        }}
-                                    >
-                                        Portrait (1080×1920)
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="setting-group">
-                                <label className="setting-label">Intensity:</label>
-                                <input
-                                    type="range"
-                                    className="setting-slider"
-                                    min="0.1"
-                                    max="2.0"
-                                    step="0.1"
-                                    value={animationSettings.intensity}
-                                    onChange={(e) => updateAnimationSetting('intensity', parseFloat(e.target.value))}
-                                />
-                                <span className="setting-value">{animationSettings.intensity}</span>
-                            </div>
-
-                            {/* Ken Burns Specific Settings */}
-                            {animationSettings.type === 'Ken Burns' && (
-                                <>
-                                    <div className="setting-group">
-                                        <label className="setting-label">Direction:</label>
-                                        <select
-                                            className="setting-select"
-                                            multiple={true}
-                                            value={animationSettings.direction}
-                                            onChange={(e) => updateAnimationSetting('direction', Array.from(e.target.selectedOptions, option => option.value))}
-                                        >
-                                            <option value="zoom-in">Zoom In</option>
-                                            <option value="zoom-out">Zoom Out</option>
-                                            <option value="pan-left">Pan Left</option>
-                                            <option value="pan-right">Pan Right</option>
-                                            <option value="pan-up">Pan Up</option>
-                                            <option value="pan-down">Pan Down</option>
-                                        </select>
-                                    </div>
-
-                                    <div className="setting-group">
-                                        <label className="setting-label">Start Scale:</label>
-                                        <input
-                                            type="number"
-                                            className="setting-input"
-                                            min="0.5"
-                                            max="2.0"
-                                            step="0.05"
-                                            value={animationSettings.startScale}
-                                            onChange={(e) => updateAnimationSetting('startScale', parseFloat(e.target.value))}
-                                        />
-                                    </div>
-
-                                    <div className="setting-group">
-                                        <label className="setting-label">End Scale:</label>
-                                        <input
-                                            type="number"
-                                            className="setting-input"
-                                            min="0.5"
-                                            max="2.0"
-                                            step="0.05"
-                                            value={animationSettings.endScale}
-                                            onChange={(e) => updateAnimationSetting('endScale', parseFloat(e.target.value))}
-                                        />
-                                    </div>
-                                </>
-                            )}
-
-                            {/* Parallax Specific Settings */}
-                            {animationSettings.type === 'Parallax' && (
-                                <>
-                                    <div className="setting-group">
-                                        <label className="setting-label">Direction:</label>
-                                        <select
-                                            className="setting-select"
-                                            value={animationSettings.direction}
-                                            onChange={(e) => updateAnimationSetting('direction', e.target.value)}
-                                        >
-                                            <option value="left-to-right">Left to Right</option>
-                                            <option value="right-to-left">Right to Left</option>
-                                            <option value="top-to-bottom">Top to Bottom</option>
-                                            <option value="bottom-to-top">Bottom to Top</option>
-                                        </select>
-                                    </div>
-
-                                    <div className="setting-group">
-                                        <label className="setting-label">Speed:</label>
-                                        <input
-                                            type="range"
-                                            className="setting-slider"
-                                            min="0.1"
-                                            max="2.0"
-                                            step="0.1"
-                                            value={animationSettings.speed}
-                                            onChange={(e) => updateAnimationSetting('speed', parseFloat(e.target.value))}
-                                        />
-                                        <span className="setting-value">{animationSettings.speed}</span>
-                                    </div>
-                                </>
-                            )}
-
-                            {/* Cinemagraph Specific Settings */}
-                            {animationSettings.type === 'Cinemagraph' && (
-                                <>
-                                    <div className="setting-group">
-                                        <label className="setting-label">Motion Area:</label>
-                                        <select
-                                            className="setting-select"
-                                            value={animationSettings.mask}
-                                            onChange={(e) => updateAnimationSetting('mask', e.target.value)}
-                                        >
-                                            <option value="center">Center</option>
-                                            <option value="left">Left Side</option>
-                                            <option value="right">Right Side</option>
-                                            <option value="top">Top Area</option>
-                                            <option value="bottom">Bottom Area</option>
-                                        </select>
-                                    </div>
-
-                                    <div className="setting-group">
-                                        <label className="setting-label">Motion Type:</label>
-                                        <select
-                                            className="setting-select"
-                                            value={animationSettings.motionType}
-                                            onChange={(e) => updateAnimationSetting('motionType', e.target.value)}
-                                        >
-                                            <option value="subtle-zoom">Subtle Zoom</option>
-                                            <option value="wave">Wave Effect</option>
-                                            <option value="breathe">Breathing Effect</option>
-                                        </select>
-                                    </div>
-                                </>
-                            )}
-
-                            {/* Dolly Zoom Specific Settings */}
-                            {animationSettings.type === 'Dolly Zoom' && (
-                                <>
-                                    <div className="setting-group">
-                                        <label className="setting-label">Start FOV:</label>
-                                        <input
-                                            type="number"
-                                            className="setting-input"
-                                            min="20"
-                                            max="120"
-                                            step="5"
-                                            value={animationSettings.startFov}
-                                            onChange={(e) => updateAnimationSetting('startFov', parseInt(e.target.value))}
-                                        />
-                                    </div>
-
-                                    <div className="setting-group">
-                                        <label className="setting-label">End FOV:</label>
-                                        <input
-                                            type="number"
-                                            className="setting-input"
-                                            min="20"
-                                            max="120"
-                                            step="5"
-                                            value={animationSettings.endFov}
-                                            onChange={(e) => updateAnimationSetting('endFov', parseInt(e.target.value))}
-                                        />
-                                    </div>
-
-                                    <div className="setting-group">
-                                        <label className="setting-label">Focus Point:</label>
-                                        <select
-                                            className="setting-select"
-                                            value={animationSettings.focusPoint}
-                                            onChange={(e) => updateAnimationSetting('focusPoint', e.target.value)}
-                                        >
-                                            <option value="center">Center</option>
-                                            <option value="left">Left</option>
-                                            <option value="right">Right</option>
-                                            <option value="top">Top</option>
-                                            <option value="bottom">Bottom</option>
-                                        </select>
-                                    </div>
-                                </>
-                            )}
-                        </div>
-
-                        <div className="animation-preview">
-                            <p className="preview-description">
-                                <strong>{animationSettings.type}</strong> animation will be applied to your image.
-                                Duration: {animationSettings.duration}s, Intensity: {animationSettings.intensity}<br/>
-                                Output Resolution: {animationSettings.width}×{animationSettings.height}
-                            </p>
-
-                            {/* FFmpeg Command Preview */}
-                            <div className="ffmpeg-command-preview">
-                                <h4 className="ffmpeg-title">🔧 FFmpeg Command Preview:</h4>
-                                <div className="ffmpeg-command">
-                                    <code>-vf "{generateFFmpegCommand(animationSettings)}"</code>
-                                </div>
-                                <p className="ffmpeg-note">
-                                    This is the approximate FFmpeg filter chain that will be used for video generation.
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="modal-actions">
-                            <button
-                                className="cancel-button"
-                                onClick={() => setShowAnimationModal(false)}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                className="generate-button"
-                                onClick={() => generateVideo(animationSettings)}
-                                disabled={isGeneratingVideo}
-                            >
-                                🎬 Generate Video with Animation
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* Multi-Frame Animation Modal */}
+            <MultiFrameAnimationModal
+                isOpen={showAnimationModal}
+                onClose={() => setShowAnimationModal(false)}
+                onGenerate={handleMultiFrameAnimationGenerate}
+                isGenerating={isGeneratingVideo}
+                sceneIndex={index}
+                audioDuration={scene.audioDuration || 5}
+                initialSettings={multiFrameAnimationSettings || animationSettings}
+            />
 
             {/* Image Generation Modal */}
             {showImageGenerationModal && (
@@ -1427,7 +1244,6 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                 </div>
             )}
 
-            {/* Preview Modal */}
             {showPreview && (
                 <div className="modal-overlay" onClick={() => setShowPreview(false)}>
                     <div className="modal-content preview-modal" onClick={e => e.stopPropagation()}>
@@ -1448,6 +1264,7 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                                 poster={uploadedImage}
                                 autoPlay={false}
                                 muted={false}
+                                key={generatedVideoUrl + '_' + Date.now()}
                                 onError={(e) => {
                                     console.error('Video error:', e);
                                     console.error('Video URL:', generatedVideoUrl);
@@ -1477,7 +1294,7 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                                     borderRadius: '8px'
                                 }}
                             >
-                                {generatedVideoUrl && <source src={generatedVideoUrl} type="video/mp4" />}
+                                {generatedVideoUrl && <source src={`${generatedVideoUrl}?t=${Date.now()}`} type="video/mp4" />}
                                 Your browser does not support the video tag.
                             </video>
 
@@ -1827,6 +1644,7 @@ function AppContent() {
             localStorage.removeItem('storyline-studio-voice-instructions');
             localStorage.removeItem('storyline-studio-story-id');
             localStorage.removeItem('storyline-studio-selected-voice');
+
             saveToLocalStorage('storyline-studio-story-id', newStoryId);
         }
     };

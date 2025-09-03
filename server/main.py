@@ -1,7 +1,8 @@
 from module.voice import generate_tts, mix_audio_tracks
-from module.video import create_video_with_ffmpeg, merge_videos
+from module.video import create_video_with_ffmpeg, merge_videos, create_video_with_ffmpeg_multi_frame
 from module.image import generate_scene_image
 from module.text import generate_text
+from module.util import extract_base64_from_data_url
 
 import os
 import base64
@@ -17,27 +18,6 @@ import uvicorn
 from dotenv import load_dotenv
 from fastapi.responses import FileResponse
 load_dotenv()
-
-def extract_base64_from_data_url(data_url):
-    """
-    Extract base64 data from a data URL
-    
-    Input: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD..."
-    Output: "/9j/4AAQSkZJRgABAQEAYABgAAD..."
-    """
-    # Method 1: Simple split (if you know the format)
-    if "base64," in data_url:
-        return data_url.split("base64,")[1]
-    
-    # Method 2: Using regex for more robust parsing
-    match = re.match(r"data:([^;]+);base64,(.+)", data_url)
-    if match:
-        mime_type = match.group(1)  # e.g., "image/jpeg"
-        base64_data = match.group(2)  # the actual base64 string
-        return base64_data
-    
-    # If it's already just base64 (no data URL prefix)
-    return data_url
 
 # Create FastAPI app instance
 app = FastAPI(
@@ -73,11 +53,20 @@ class AudioGenerationRequest(BaseModel):
     text: str
     voice_settings: Dict[str, Any] = {}
 
+class VideoFrame(BaseModel):
+    id: int
+    uploadedImageData: Optional[str] = None  # Base64 image data
+
 class VideoGenerationRequest(BaseModel):
     story_id: str
     scene_id: str
     image: str
     animation: Optional[str] = None
+
+    animation_type: str = 'single-frame'
+    ffmpeg_command: Optional[str] = None  # Required for multi-frame animations
+    total_duration: Optional[float] = None
+    frames: Optional[List[VideoFrame]] = [] # For multi-frame animations
 
 class VisualPromptGenerationRequest(BaseModel):
     text: str
@@ -299,14 +288,28 @@ async def generate_video(request: VideoGenerationRequest):
         audio_path = data_dir / "audios" / f"{request.scene_id}.mp3"
         print(f"Audio path is {audio_path}, exists: {audio_path.exists()}")
         print(f"Video will be saved to {video_path}")
-
-        create_video_with_ffmpeg(
-            image_path=str(image_path),
-            audio_path=str(audio_path),
-            animation_str=request.animation,
-            output_path=str(video_path)
-        )
-        print(f"Video generation process completed.")
+        if request.animation_type == 'single-frame':
+            create_video_with_ffmpeg(
+                image_path=str(image_path),
+                audio_path=str(audio_path),
+                animation_str=request.animation,
+                output_path=str(video_path)
+            )
+            print(f"single-frame video generation process completed.")
+        else:
+            frame_images = [frame.uploadedImageData for frame in request.frames if frame.uploadedImageData]
+            if not frame_images:
+                raise HTTPException(
+                    status_code=400, detail="At least one frame image is required for multi-frame animation")
+            create_video_with_ffmpeg_multi_frame(
+                scene_id=request.scene_id,
+                image_path=str(image_path),
+                frame_images=frame_images,
+                audio_path=str(audio_path),
+                ffmpeg_command=request.ffmpeg_command,
+                output_path=str(video_path)
+            )
+            print(f"multi-frame video generation process completed.")
 
         return VideoGenerationResponse(
             success=True,
