@@ -26,7 +26,6 @@ def create_video_with_ffmpeg_multi_frame(scene_id: str, image_path, frame_images
         else:
             raise FileNotFoundError(f"Expected output file {multiframe_path} was not created by ffmpeg")
 
-
 def create_video_with_ffmpeg(image_path, audio_path, animation_str, output_path):
     if not os.path.exists(image_path):
         raise FileNotFoundError(f"Image file not found: {image_path}")
@@ -95,7 +94,6 @@ def needs_normalization(video_path):
 
     return False
 
-
 def normalize_video(input_path, output_path):
     subprocess.run([
         "ffmpeg", "-y", "-i", input_path,
@@ -103,7 +101,6 @@ def normalize_video(input_path, output_path):
         "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
         output_path
     ], check=True)
-
 
 def merge_videos(video_paths, output_path):
     fixed_paths = []
