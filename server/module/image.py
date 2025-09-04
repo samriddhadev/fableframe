@@ -1,11 +1,14 @@
 import base64
 import math
 import os
+import json
 import traceback
+import time
 from pathlib import Path
 
 from google import genai
 from google.genai import types
+from google.genai.errors import ClientError
 from PIL import Image
 from io import BytesIO
 
@@ -16,7 +19,7 @@ client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 # Use a valid model for image generation that's available in your account
 # From the model listing, these models support image generation:
-_MODEL = "gemini-1.5-flash"  # This was in your original code and is available
+_MODEL = "gemini-2.5-flash-image-preview"  # This was in your original code and is available
 
 def list_available_models():
     """List all available models to help debug model availability issues"""
@@ -31,7 +34,7 @@ def list_available_models():
         return []
     
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=3, min=30, max=90))
+# @retry(stop=stop_after_attempt(1), wait=wait_exponential(multiplier=3, min=30, max=90))
 def _generate_scene_image_with_retry(
     story_id: str,
     scene_id: str,
@@ -40,7 +43,8 @@ def _generate_scene_image_with_retry(
     width: int = 512,
     height: int = 512,
     negative_prompt: str = None,
-    reference_scene_id: str = None
+    reference_scene_id: str = None,
+    retry_count: int = 1
 ) -> str:
     """Internal function with retry logic for image generation"""
     image_base64 = None
@@ -108,7 +112,36 @@ def _generate_scene_image_with_retry(
         
         if not image_base64:
             raise Exception("Failed to generate image")
+    except ClientError as ce:
+        print(f"ClientError during image generation: {ce}")
+        print(type(ce.code))
+        if ce.code == 429:
+            # Handle rate limit error specifically
+            print("Rate limit exceeded")
+            print(f"Error details: {json.dumps(ce.details, indent=2)}")
+            delay = ce.details.get('error', {}).get('details')[2].get('retryDelay', 30) if ce.details else 30
+            delay_second = delay[0:delay.find('s')]
+            print(f"Retrying after {delay_second} seconds...")
+            time.sleep(int(delay_second) + 1)
+            if retry_count < 10:
+                return _generate_scene_image_with_retry(
+                    story_id=story_id,
+                    scene_id=scene_id,
+                    visual_prompt=visual_prompt,
+                    model=model,
+                    width=width,
+                    height=height,
+                    negative_prompt=negative_prompt,
+                    reference_scene_id=reference_scene_id,
+                    retry_count=retry_count + 1
+                )
+            else:
+                raise Exception("Max retries exceeded for rate limit errors")
+        else:
+            raise ce
     except Exception as e:
+        print(type(e))
+        print(e.args)
         print(f"Error during image generation: {e}")
         raise e
     return image_base64
@@ -131,7 +164,7 @@ def generate_scene_image(
             story_id=story_id,
             scene_id=scene_id,
             visual_prompt=visual_prompt,
-            model=model,
+            model=_MODEL,
             width=width,
             height=height,
             negative_prompt=negative_prompt,

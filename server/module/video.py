@@ -116,6 +116,38 @@ def normalize_video(input_path, output_path):
     ], check=True)
 
 
+def get_video_audio_duration(video_path):
+    """Get the duration of video and audio streams in a video file."""
+    # Get video duration
+    cmd_video = [
+        "ffprobe", "-v", "error",
+        "-select_streams", "v:0",
+        "-show_entries", "stream=duration",
+        "-of", "json",
+        video_path
+    ]
+    result_video = subprocess.run(cmd_video, capture_output=True, text=True, check=True)
+    video_info = json.loads(result_video.stdout)
+    video_duration = float(video_info.get("streams", [{"duration": "0"}])[0].get("duration", 0))
+
+    # Get audio duration
+    cmd_audio = [
+        "ffprobe", "-v", "error",
+        "-select_streams", "a:0",
+        "-show_entries", "stream=duration",
+        "-of", "json",
+        video_path
+    ]
+    result_audio = subprocess.run(cmd_audio, capture_output=True, text=True, check=True)
+    audio_info = json.loads(result_audio.stdout)
+    audio_duration = float(audio_info.get("streams", [{"duration": "0"}])[0].get("duration", 0))
+
+    return {
+        "video_duration": video_duration,
+        "audio_duration": audio_duration
+    }
+
+
 def merge_videos(video_paths, output_path):
     fixed_paths = []
     for i, v in enumerate(video_paths):
@@ -128,24 +160,57 @@ def merge_videos(video_paths, output_path):
             print(f"✅ Skipping normalization: {v}")
             fixed_paths.append(os.path.abspath(v))
 
-    # Write concat list
-    with open("video_list.txt", "w", encoding="utf-8") as f:
-        for v in fixed_paths:
-            f.write(f"file '{v.replace(os.sep, '/')}'\n")
-
-    # Lossless concat
-    subprocess.run([
-        "ffmpeg", "-y",
-        "-f", "concat", "-safe", "0",
-        "-i", "video_list.txt",
-        "-c", "copy",
-        output_path
-    ], check=True)
-
-    os.remove("video_list.txt")
-    # Clean only the intermediate normalized files
-    for i, v in enumerate(video_paths):
-        fixed = f"fixed_{i}.mp4"
-        if os.path.exists(fixed):
-            os.remove(fixed)
-    print(f"🎉 Merged video saved to {output_path}")
+    # Create temporary directory for processed videos
+    temp_dir = tempfile.mkdtemp()
+    try:
+        processed_files = []
+        
+        # Process each video to ensure audio completion
+        for i, video_path in enumerate(fixed_paths):
+            # Get duration of the video and audio
+            video_info = get_video_audio_duration(video_path)
+            max_duration = max(video_info['video_duration'], video_info['audio_duration'])
+            
+            # Process the video to ensure it plays for the full duration of its audio
+            processed_file = os.path.join(temp_dir, f"processed_{i}.mp4")
+            print(f"🔄 Ensuring audio completion for video {i+1}/{len(fixed_paths)}")
+            
+            subprocess.run([
+                "ffmpeg", "-y",
+                "-i", video_path,
+                "-c:v", "libx264", "-preset", "fast",
+                "-c:a", "aac",
+                "-t", str(max_duration),  # Set the duration to match the longest stream
+                processed_file
+            ], check=True)
+            
+            processed_files.append(processed_file)
+        
+        # Write concat list
+        concat_list_path = os.path.join(temp_dir, "video_list.txt")
+        with open(concat_list_path, "w", encoding="utf-8") as f:
+            for v in processed_files:
+                f.write(f"file '{v.replace(os.sep, '/')}'\n")
+        
+        # Concat with re-encoding to ensure smooth transitions
+        subprocess.run([
+            "ffmpeg", "-y",
+            "-f", "concat", "-safe", "0",
+            "-i", concat_list_path,
+            "-c:v", "libx264", "-preset", "fast",
+            "-c:a", "aac", "-b:a", "192k",
+            "-movflags", "+faststart",
+            output_path
+        ], check=True)
+        
+        print(f"🎉 Merged video saved to {output_path}")
+        
+    finally:
+        # Clean up temporary directory and files
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        
+        # Clean only the intermediate normalized files
+        for i, v in enumerate(video_paths):
+            fixed = f"fixed_{i}.mp4"
+            if os.path.exists(fixed):
+                os.remove(fixed)
