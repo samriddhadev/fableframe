@@ -179,19 +179,17 @@ export const parallaxFilterExpression = (settings, duration, width, height, fps)
 
 export const cinemagraphFilterExpression = (settings, duration, width, height, fps) => {
     const animationSettings = getAnimationSettings(settings);
-    const motionIntensity = animationSettings.intensity * 5;
+    const motionIntensity = (animationSettings.intensity * 5)
+    const motionIntensityDec = (animationSettings.intensity * 5)/100 || 0.05; // scale 0-20 to 0-0.1
     const loopDuration = animationSettings.loopDuration || duration;
     const frames = Math.floor(duration * fps);
     switch (animationSettings.motionType) {
         case 'subtle-zoom':
-            filter = `zoompan=z='1+${motionIntensity}/100*sin(2*PI*(t/${loopDuration}))':d=${frames}:fps=${fps}`;
-            break;
+            return `zoompan=z='1+${motionIntensityDec}*sin(2*PI*((on/25)/${loopDuration}))':d=${frames}:fps=${fps}`;
         case 'wave':
-            filter = `crop=iw:ih:x='${motionIntensity}*sin(2*PI*(t/${loopDuration}))':y=0`;
-            break;
+            return `crop=iw:ih:x='${motionIntensity}*sin(2*PI*(t/${loopDuration}))':y=0`;
         case 'breathe':
-            filter = `scale=iw*(1+${motionIntensity}/100*sin(2*PI*(t/${loopDuration}))):ih*(1+${motionIntensity}/100*sin(2*PI*(t/${loopDuration})))`;
-            break;
+            return `scale=iw*(1+${motionIntensity}/100*sin(2*PI*(t/${loopDuration}))):ih*(1+${motionIntensity}/100*sin(2*PI*(t/${loopDuration})))`;
     }
 }
 
