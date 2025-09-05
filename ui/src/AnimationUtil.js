@@ -165,15 +165,15 @@ export const parallaxFilterExpression = (settings, duration, width, height, fps)
     const frames = Math.floor(duration * fps);
     switch (direction) {
         case 'left-to-right':
-            return `zoompan=z='1':x='iw/2-(iw/zoom/2)-${speed}*in':y='ih/2-(ih/zoom/2)':d=${frames}:s=${width}x${height}:fps=${fps}`;
+            return `crop=iw*0.8:ih:x=(iw-ow)*t/${duration}:y=0`;
         case 'right-to-left':
-            return `zoompan=z='1':x='iw/2-(iw/zoom/2)+${speed}*in':y='ih/2-(ih/zoom/2)':d=${frames}:s=${width}x${height}:fps=${fps}`;
+            return `crop=iw*0.8:ih:x=(iw-ow)*(1-t/${duration}):y=0`;
         case 'top-to-bottom':
-            return `zoompan=z='1':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)-${speed}*in':d=${frames}:s=${width}x${height}:fps=${fps}`;
+            return `crop=iw:ih*0.8:x=0:y=(ih-oh)*t/${duration}`;
         case 'bottom-to-top':
-            return `zoompan=z='1':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)+${speed}*in':d=${frames}:s=${width}x${height}:fps=${fps}`;
+            return `crop=iw:ih*0.8:x=0:y=(ih-oh)*(1-t/${duration})`;
         default:
-            return `zoompan=z='1':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=${width}x${height}:fps=${fps}`;
+            return `crop=iw*0.8:ih:x=(iw-ow)*t/${duration}:y=0`; // default to left-to-right
     }
 }
 
