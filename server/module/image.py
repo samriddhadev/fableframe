@@ -97,13 +97,16 @@ def _generate_scene_image_with_retry(
             print(f"Response from generate_content: {response}")
             # Extract image from response
             if response.candidates and response.candidates[0].content.parts:
-                part = response.candidates[0].content.parts[0]
-                
-                # Check if the part has inline_data (an image)
-                if part.inline_data:
-                    image_bytes = part.inline_data.data
-                    image_base64 = base64.b64encode(image_bytes).decode('utf-8')
-                else:
+                parts = response.candidates[0].content.parts
+                has_image = False
+                for part in parts:
+                    # Check if the part has inline_data (an image)
+                    if part.inline_data:
+                        image_bytes = part.inline_data.data
+                        image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+                        has_image = True
+                        break
+                if not has_image:
                     print("No image data found, trying fallback approach")
                     raise Exception("No image data found in response")
             else:

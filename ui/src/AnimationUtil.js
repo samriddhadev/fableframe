@@ -179,12 +179,20 @@ export const parallaxFilterExpression = (settings, duration, width, height, fps)
 
 export const cinemagraphFilterExpression = (settings, duration, width, height, fps) => {
     const animationSettings = getAnimationSettings(settings);
+    
     const motionIntensity = (animationSettings.intensity * 5)
     const motionIntensityDec = (animationSettings.intensity * 5)/100 || 0.05; // scale 0-20 to 0-0.1
     const loopDuration = animationSettings.loopDuration || duration;
     const frames = Math.floor(duration * fps);
     switch (animationSettings.motionType) {
         case 'subtle-zoom':
+            const effect = animationSettings.effect;
+            switch(effect) {
+                case 'in':
+                    return `zoompan=z='1+(${motionIntensityDec}*(on/${loopDuration}))':d=1:fps=${fps}:s=${width}x${height}`;
+                case 'in-out':
+                    return `zoompan=z='1 + ${motionIntensityDec}*abs(sin(2*PI*on/${loopDuration}))':d=1:fps=${fps}:s=${width}x${height}`;
+            }
             return `zoompan=z='1+${motionIntensityDec}*sin(2*PI*((on/25)/${loopDuration}))':d=${frames}:fps=${fps}`;
         case 'wave':
             return `crop=iw:ih:x='${motionIntensity}*sin(2*PI*(t/${loopDuration}))':y=0`;

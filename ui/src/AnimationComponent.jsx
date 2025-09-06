@@ -52,7 +52,7 @@ const AnimationComponent = ({
                                 type: 'Cinemagraph',
                                 intensity: 1.0,
                                 duration: animationSettings.duration,
-                                mask: 'center',
+                                effect: 'in',
                                 motionType: 'subtle-zoom',
                                 loopDuration: 3,
                                 width: animationSettings.width,
@@ -281,21 +281,6 @@ const AnimationComponent = ({
             {animationSettings.type === 'Cinemagraph' && (
                 <>
                     <div className="setting-group">
-                        <label className="setting-label">Motion Area:</label>
-                        <select
-                            className="setting-select"
-                            value={animationSettings.mask}
-                            onChange={(e) => updateSetting('mask', e.target.value)}
-                        >
-                            <option value="center">Center</option>
-                            <option value="left">Left Side</option>
-                            <option value="right">Right Side</option>
-                            <option value="top">Top Area</option>
-                            <option value="bottom">Bottom Area</option>
-                        </select>
-                    </div>
-
-                    <div className="setting-group">
                         <label className="setting-label">Motion Type:</label>
                         <select
                             className="setting-select"
@@ -307,6 +292,32 @@ const AnimationComponent = ({
                             <option value="breathe">Breathing Effect</option>
                         </select>
                     </div>
+                    <div className="setting-group">
+                        <label className="setting-label">Loop Duration:</label>
+                        <input
+                            type="range"
+                            className="setting-slider"
+                            min="0.1"
+                            max="3000.0"
+                            step="0.1"
+                            value={animationSettings.loopDuration || 1.0}
+                            onChange={(e) => updateSetting('loopDuration', parseFloat(e.target.value))}
+                        />
+                        <span className="setting-value">{animationSettings.loopDuration || 25.0}</span>
+                    </div>
+                    {animationSettings.motionType === 'subtle-zoom' && (
+                        <div className="setting-group">
+                            <label className="setting-label">Effect:</label>
+                            <select
+                                className="setting-select"
+                                value={animationSettings.effect}
+                                onChange={(e) => updateSetting('effect', e.target.value)}
+                            >
+                                <option value="in">In</option>
+                                <option value="in-out">In-Out</option>
+                            </select>
+                        </div>
+                    )}
                 </>
             )}
         </div>
