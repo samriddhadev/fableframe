@@ -8,7 +8,7 @@ import json
 from module.util import extract_base64_from_data_url
 
 FIRST_PAUSE_DURATION = 1  # seconds
-PAUSE_DURATION = 2  # seconds
+PAUSE_DURATION = 1  # seconds
 
 
 def create_video_with_ffmpeg_multi_frame(scene_id: str, image_path, frame_images: list[str], audio_path, ffmpeg_command, output_path):
@@ -151,6 +151,43 @@ def get_video_audio_duration(video_path):
     }
 
 
+# Generate a pause clip using the first frame of a video
+def create_pause_clip_from_first_frame(pause_path, first_video_path, duration=FIRST_PAUSE_DURATION, width=1280, height=720):
+    """Create a pause clip using the first frame of the next video"""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        # Extract the first frame from the video
+        first_frame_path = os.path.join(temp_dir, "first_frame.png")
+        subprocess.run([
+            "ffmpeg", "-y",
+            "-i", first_video_path,
+            "-vframes", "1",
+            "-q:v", "1",
+            "-vf", f"scale={width}:{height}",
+            first_frame_path
+        ], check=True)
+
+        # Create pause video using the extracted frame
+        subprocess.run([
+            "ffmpeg", "-y",
+            "-loop", "1",
+            "-i", first_frame_path,
+            "-f", "lavfi",
+            "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",  # silent audio
+            "-t", str(duration),
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-crf", "23",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-pix_fmt", "yuv420p",
+            pause_path
+        ], check=True)
+
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 # Generate a pause clip using the last frame of a video
 def create_pause_clip_from_last_frame(pause_path, last_video_path, duration=PAUSE_DURATION, width=1280, height=720):
     """Create a pause clip using the last frame of the previous video"""
@@ -243,12 +280,25 @@ def merge_videos(video_paths, output_path, width, height):
 
             processed_files.append(processed_file)
 
-        # Write concat list with pauses in between
+        # Write concat list with initial pause and pauses between videos
         concat_list_path = os.path.join(temp_dir, "video_list.txt")
         with open(concat_list_path, "w", encoding="utf-8") as f:
+            # Add initial pause using first frame of first video
+            if processed_files:
+                initial_pause_clip = os.path.join(temp_dir, "initial_pause.mp4")
+                try:
+                    create_pause_clip_from_first_frame(initial_pause_clip, processed_files[0], FIRST_PAUSE_DURATION, width, height)
+                    print(f"✅ Created initial pause clip from first frame")
+                except Exception as e:
+                    print(f"⚠️ Failed to create initial pause from first frame, using black: {e}")
+                    create_pause_clip(initial_pause_clip, FIRST_PAUSE_DURATION, width, height)
+                
+                f.write(f"file '{initial_pause_clip.replace(os.sep, '/')}'\n")
+
+            # Add videos with pauses between them
             for idx, v in enumerate(processed_files):
                 f.write(f"file '{v.replace(os.sep, '/')}'\n")
-                if idx < len(processed_files):
+                if idx < len(processed_files) - 1:  # Don't add pause after last video
                     # Create pause clip using last frame of current video
                     pause_clip = os.path.join(temp_dir, f"pause_{idx}.mp4")
                     try:
