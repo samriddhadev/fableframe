@@ -91,7 +91,7 @@ const AnimationComponent = ({
             {/* Duration Setting */}
             {showDurationSetting && (
                 <div className="setting-group">
-                    <label className="setting-label">Duration (seconds):</label>
+                    <label className="setting-label">Duration:</label>
                     <input
                         type="number"
                         className="setting-input"
@@ -289,21 +289,19 @@ const AnimationComponent = ({
                         >
                             <option value="subtle-zoom">Subtle Zoom</option>
                             <option value="wave">Wave Effect</option>
-                            <option value="breathe">Breathing Effect</option>
                         </select>
                     </div>
                     <div className="setting-group">
                         <label className="setting-label">Loop Duration:</label>
                         <input
-                            type="range"
-                            className="setting-slider"
+                            type="number"
+                            className="setting-input"
                             min="0.1"
-                            max="3000.0"
+                            max="3000"
                             step="0.1"
-                            value={animationSettings.loopDuration || 1.0}
+                            value={animationSettings.loopDuration || 5}
                             onChange={(e) => updateSetting('loopDuration', parseFloat(e.target.value))}
                         />
-                        <span className="setting-value">{animationSettings.loopDuration || 25.0}</span>
                     </div>
                     {animationSettings.motionType === 'subtle-zoom' && (
                         <div className="setting-group">
