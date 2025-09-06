@@ -58,16 +58,6 @@ const AnimationComponent = ({
                                 width: animationSettings.width,
                                 height: animationSettings.height
                             },
-                            'Dolly Zoom': {
-                                type: 'Dolly Zoom',
-                                intensity: 1.0,
-                                duration: animationSettings.duration,
-                                startFov: 50,
-                                endFov: 80,
-                                focusPoint: 'center',
-                                width: animationSettings.width,
-                                height: animationSettings.height
-                            },
                             'Static': {
                                 type: 'Static',
                                 intensity: 1.0,
@@ -94,7 +84,6 @@ const AnimationComponent = ({
                     <option value="Ken Burns">Ken Burns (Pan & Zoom)</option>
                     <option value="Parallax">Parallax (Layer Movement)</option>
                     <option value="Cinemagraph">Cinemagraph (Selective Motion)</option>
-                    <option value="Dolly Zoom">Dolly Zoom (Focus Pull)</option>
                     <option value="Static">Static (No Animation)</option>
                 </select>
             </div>
@@ -316,52 +305,6 @@ const AnimationComponent = ({
                             <option value="subtle-zoom">Subtle Zoom</option>
                             <option value="wave">Wave Effect</option>
                             <option value="breathe">Breathing Effect</option>
-                        </select>
-                    </div>
-                </>
-            )}
-
-            {/* Dolly Zoom Specific Settings */}
-            {animationSettings.type === 'Dolly Zoom' && (
-                <>
-                    <div className="setting-group">
-                        <label className="setting-label">Start FOV:</label>
-                        <input
-                            type="number"
-                            className="setting-input"
-                            min="20"
-                            max="120"
-                            step="5"
-                            value={animationSettings.startFov || 50}
-                            onChange={(e) => updateSetting('startFov', parseInt(e.target.value))}
-                        />
-                    </div>
-
-                    <div className="setting-group">
-                        <label className="setting-label">End FOV:</label>
-                        <input
-                            type="number"
-                            className="setting-input"
-                            min="20"
-                            max="120"
-                            step="5"
-                            value={animationSettings.endFov || 80}
-                            onChange={(e) => updateSetting('endFov', parseInt(e.target.value))}
-                        />
-                    </div>
-
-                    <div className="setting-group">
-                        <label className="setting-label">Focus Point:</label>
-                        <select
-                            className="setting-select"
-                            value={animationSettings.focusPoint}
-                            onChange={(e) => updateSetting('focusPoint', e.target.value)}
-                        >
-                            <option value="center">Center</option>
-                            <option value="left">Left</option>
-                            <option value="right">Right</option>
-                            <option value="top">Top</option>
-                            <option value="bottom">Bottom</option>
                         </select>
                     </div>
                 </>

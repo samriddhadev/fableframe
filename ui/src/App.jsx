@@ -298,10 +298,10 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                     filter = cinemagraphFilterExpression(settings, duration, width, height, fps);
                     break;
                 }
-                case 'Dolly Zoom': {
-                    filter = dollyzoomFilterExpression(settings, duration, width, height, fps);
-                    break;
-                }
+                // case 'Dolly Zoom': {
+                //     filter = dollyzoomFilterExpression(settings, duration, width, height, fps);
+                //     break;
+                // }
 
                 case 'Static':
                     return null;
@@ -446,9 +446,9 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                     return cinemagraphFilterExpression(animationSettings, duration, width, height, fps) + ',';
                 }
 
-                case 'Dolly Zoom': {
-                    return dollyzoomFilterExpression(animationSettings, duration, width, height, fps) + ',';
-                }
+                // case 'Dolly Zoom': {
+                //     return dollyzoomFilterExpression(animationSettings, duration, width, height, fps) + ',';
+                // }
 
                 case 'Static':
                 default:
