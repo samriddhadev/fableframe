@@ -7,6 +7,9 @@ import json
 
 from module.util import extract_base64_from_data_url
 
+FIRST_PAUSE_DURATION = 1  # seconds
+PAUSE_DURATION = 2  # seconds
+
 
 def create_video_with_ffmpeg_multi_frame(scene_id: str, image_path, frame_images: list[str], audio_path, ffmpeg_command, output_path):
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -148,7 +151,64 @@ def get_video_audio_duration(video_path):
     }
 
 
-def merge_videos(video_paths, output_path):
+# Generate a pause clip using the last frame of a video
+def create_pause_clip_from_last_frame(pause_path, last_video_path, duration=PAUSE_DURATION, width=1280, height=720):
+    """Create a pause clip using the last frame of the previous video"""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        # Extract the last frame from the video
+        last_frame_path = os.path.join(temp_dir, "last_frame.png")
+        subprocess.run([
+            "ffmpeg", "-y",
+            "-sseof", "-1",  # Start 1 second before end
+            "-i", last_video_path,
+            "-update", "1",
+            "-q:v", "1",
+            "-vf", f"scale={width}:{height}",
+            last_frame_path
+        ], check=True)
+
+        # Create pause video using the extracted frame
+        subprocess.run([
+            "ffmpeg", "-y",
+            "-loop", "1",
+            "-i", last_frame_path,
+            "-f", "lavfi",
+            "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",  # silent audio
+            "-t", str(duration),
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-crf", "23",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-pix_fmt", "yuv420p",
+            pause_path
+        ], check=True)
+
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+# Generate a silent black video pause (fallback)
+def create_pause_clip(pause_path, duration=PAUSE_DURATION, width=1280, height=720):
+    subprocess.run([
+        "ffmpeg", "-y",
+        "-f", "lavfi",
+        "-i", f"color=size={width}x{height}:rate=25:color=black",  # black frame
+        "-f", "lavfi",
+        "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",  # silent audio
+        "-t", str(duration),
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-crf", "23",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        pause_path
+    ], check=True)
+
+
+# Merge videos with pause in between
+def merge_videos(video_paths, output_path, width, height):
     fixed_paths = []
     for i, v in enumerate(video_paths):
         if needs_normalization(v):
@@ -160,39 +220,47 @@ def merge_videos(video_paths, output_path):
             print(f"✅ Skipping normalization: {v}")
             fixed_paths.append(os.path.abspath(v))
 
-    # Create temporary directory for processed videos
     temp_dir = tempfile.mkdtemp()
     try:
         processed_files = []
-        
-        # Process each video to ensure audio completion
+
+        # Process each video and ensure audio/video duration match
         for i, video_path in enumerate(fixed_paths):
-            # Get duration of the video and audio
             video_info = get_video_audio_duration(video_path)
             max_duration = max(video_info['video_duration'], video_info['audio_duration'])
-            
-            # Process the video to ensure it plays for the full duration of its audio
+
             processed_file = os.path.join(temp_dir, f"processed_{i}.mp4")
             print(f"🔄 Ensuring audio completion for video {i+1}/{len(fixed_paths)}")
-            
+
             subprocess.run([
                 "ffmpeg", "-y",
                 "-i", video_path,
                 "-c:v", "libx264", "-preset", "fast",
                 "-c:a", "aac",
-                "-t", str(max_duration),  # Set the duration to match the longest stream
+                "-t", str(max_duration),
                 processed_file
             ], check=True)
-            
+
             processed_files.append(processed_file)
-        
-        # Write concat list
+
+        # Write concat list with pauses in between
         concat_list_path = os.path.join(temp_dir, "video_list.txt")
         with open(concat_list_path, "w", encoding="utf-8") as f:
-            for v in processed_files:
+            for idx, v in enumerate(processed_files):
                 f.write(f"file '{v.replace(os.sep, '/')}'\n")
-        
-        # Concat with re-encoding to ensure smooth transitions
+                if idx < len(processed_files):
+                    # Create pause clip using last frame of current video
+                    pause_clip = os.path.join(temp_dir, f"pause_{idx}.mp4")
+                    try:
+                        create_pause_clip_from_last_frame(pause_clip, v, PAUSE_DURATION, width, height)
+                        print(f"✅ Created pause clip from last frame of video {idx+1}")
+                    except Exception as e:
+                        print(f"⚠️ Failed to create pause from last frame, using black: {e}")
+                        create_pause_clip(pause_clip, PAUSE_DURATION, width, height)
+                    
+                    f.write(f"file '{pause_clip.replace(os.sep, '/')}'\n")
+
+        # Final concat command
         subprocess.run([
             "ffmpeg", "-y",
             "-f", "concat", "-safe", "0",
@@ -202,15 +270,13 @@ def merge_videos(video_paths, output_path):
             "-movflags", "+faststart",
             output_path
         ], check=True)
-        
-        print(f"🎉 Merged video saved to {output_path}")
-        
+
+        print(f"🎉 Merged video with pauses saved to {output_path}")
+
     finally:
-        # Clean up temporary directory and files
         shutil.rmtree(temp_dir, ignore_errors=True)
-        
-        # Clean only the intermediate normalized files
         for i, v in enumerate(video_paths):
             fixed = f"fixed_{i}.mp4"
             if os.path.exists(fixed):
                 os.remove(fixed)
+

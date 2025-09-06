@@ -1640,7 +1640,20 @@ function AppContent() {
             // Extract scene IDs from completed scenes
             const sceneIds = completedScenes.map(scene => String(scene.id));
 
-            console.log(`Accumulating final video for Story ID: ${storyId} with ${completedScenes.length} scenes`);
+            // Get dimensions from the first scene's animation settings
+            const firstScene = completedScenes[0];
+            let width = 1280; // default
+            let height = 720; // default
+
+            if (firstScene.multiFrameAnimationSettings?.frames?.[0]?.animation) {
+                width = firstScene.multiFrameAnimationSettings.frames[0].animation.width || 1280;
+                height = firstScene.multiFrameAnimationSettings.frames[0].animation.height || 720;
+            } else if (firstScene.animationSettings) {
+                width = firstScene.animationSettings.width || 1280;
+                height = firstScene.animationSettings.height || 720;
+            }
+
+            console.log(`Accumulating final video for Story ID: ${storyId} with ${completedScenes.length} scenes, dimensions: ${width}x${height}`);
 
             const response = await fetch('http://localhost:8000/accumulate', {
                 method: 'POST',
@@ -1649,7 +1662,9 @@ function AppContent() {
                 },
                 body: JSON.stringify({
                     story_id: storyId,
-                    scenes: sceneIds
+                    scenes: sceneIds,
+                    width: width,
+                    height: height
                 })
             });
 

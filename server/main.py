@@ -80,6 +80,8 @@ class VisualPromptGenerationRequest(BaseModel):
 class AccumulateRequest(BaseModel):
     story_id: str
     scenes: list[str]
+    width: Optional[int] = 512
+    height: Optional[int] = 512
 
 class InitRequest(BaseModel):
     story_id: str
@@ -390,7 +392,7 @@ async def accumulate(request: AccumulateRequest):
         # Delete the output file if it exists
         if output_path.exists():
             output_path.unlink()
-        merge_videos(video_paths, str(output_path))
+        merge_videos(video_paths, str(output_path), width=request.width, height=request.height)
 
         if not output_path.exists():
             raise HTTPException(status_code=500, detail="Merged video file not found after processing.")
