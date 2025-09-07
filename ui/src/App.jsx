@@ -1537,13 +1537,33 @@ function AppContent() {
 
     // OpenAI supported voices
     const openAIVoices = [
-        { id: 'alloy', name: 'Alloy', description: 'Balanced and versatile' },
-        { id: 'echo', name: 'Echo', description: 'Warm and engaging' },
-        { id: 'fable', name: 'Fable', description: 'Expressive and storytelling' },
-        { id: 'onyx', name: 'Onyx', description: 'Deep and authoritative' },
-        { id: 'nova', name: 'Nova', description: 'Bright and energetic' },
-        { id: 'shimmer', name: 'Shimmer', description: 'Gentle and soothing' }
+        { id: 'alloy', name: 'Alloy', description: 'Balanced and versatile', provider: 'openai' },
+        { id: 'echo', name: 'Echo', description: 'Warm and engaging', provider: 'openai' },
+        { id: 'fable', name: 'Fable', description: 'Expressive and storytelling', provider: 'openai' },
+        { id: 'onyx', name: 'Onyx', description: 'Deep and authoritative', provider: 'openai' },
+        { id: 'nova', name: 'Nova', description: 'Bright and energetic', provider: 'openai' },
+        { id: 'shimmer', name: 'Shimmer', description: 'Gentle and soothing', provider: 'openai' }
     ];
+
+    // Google Gemini/WaveNet Indian voices
+    // const geminiVoices = [
+    //     { id: 'en-IN-Wavenet-A', name: 'Wavenet Indian Female A', description: 'Natural Indian English (Female)', provider: 'gemini' },
+    //     { id: 'en-IN-Wavenet-B', name: 'Wavenet Indian Male B', description: 'Natural Indian English (Male)', provider: 'gemini' },
+    //     { id: 'en-IN-Wavenet-C', name: 'Wavenet Indian Female C', description: 'Natural Indian English (Female)', provider: 'gemini' },
+    //     { id: 'en-IN-Wavenet-D', name: 'Wavenet Indian Male D', description: 'Natural Indian English (Male)', provider: 'gemini' },
+    //     { id: 'en-IN-Standard-A', name: 'Standard Indian Female A', description: 'Standard Indian English (Female)', provider: 'gemini' },
+    //     { id: 'en-IN-Standard-B', name: 'Standard Indian Male B', description: 'Standard Indian English (Male)', provider: 'gemini' },
+    //     { id: 'en-IN-Standard-C', name: 'Standard Indian Female C', description: 'Standard Indian English (Female)', provider: 'gemini' },
+    //     { id: 'en-IN-Standard-D', name: 'Standard Indian Male D', description: 'Standard Indian English (Male)', provider: 'gemini' },
+    //     { id: 'hi-IN-Wavenet-A', name: 'Hindi Wavenet Female A', description: 'Natural Hindi (Female)', provider: 'gemini' },
+    //     { id: 'hi-IN-Wavenet-B', name: 'Hindi Wavenet Male B', description: 'Natural Hindi (Male)', provider: 'gemini' },
+    //     { id: 'hi-IN-Wavenet-C', name: 'Hindi Wavenet Female C', description: 'Natural Hindi (Female)', provider: 'gemini' },
+    //     { id: 'hi-IN-Wavenet-D', name: 'Hindi Wavenet Male D', description: 'Natural Hindi (Male)', provider: 'gemini' }
+    // ];
+
+    // Combined voice options
+    // const allVoices = [...openAIVoices, ...geminiVoices];
+    const allVoices = [...openAIVoices];
 
     // Initialize state with localStorage data
     useEffect(() => {
@@ -1772,7 +1792,7 @@ function AppContent() {
                     {/* Voice Selection */}
                     <div className={`voice-selection-container ${isAnySceneGenerating || isMergingFinalVideo ? 'disabled' : ''}`}>
                         <label htmlFor="voice-selection" className="voice-selection-label">
-                            🎤
+                            🎤 Voice Selection
                         </label>
                         <select
                             id="voice-selection"
@@ -1781,11 +1801,20 @@ function AppContent() {
                             onChange={(e) => setSelectedVoice(e.target.value)}
                             disabled={isAnySceneGenerating || isMergingFinalVideo}
                         >
-                            {openAIVoices.map(voice => (
-                                <option key={voice.id} value={voice.id}>
-                                    {voice.name} - {voice.description}
-                                </option>
-                            ))}
+                            <optgroup label="OpenAI Voices">
+                                {openAIVoices.map(voice => (
+                                    <option key={voice.id} value={voice.id}>
+                                        {voice.name} - {voice.description}
+                                    </option>
+                                ))}
+                            </optgroup>
+                            <optgroup label="Google Gemini/WaveNet Voices">
+                                {geminiVoices.map(voice => (
+                                    <option key={voice.id} value={voice.id}>
+                                        {voice.name} - {voice.description}
+                                    </option>
+                                ))}
+                            </optgroup>
                         </select>
                         <p className="voice-selection-help">
                             Choose a voice for narration. This will be used for all scenes.
