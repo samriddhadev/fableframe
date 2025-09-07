@@ -1808,13 +1808,13 @@ function AppContent() {
                                     </option>
                                 ))}
                             </optgroup>
-                            <optgroup label="Google Gemini/WaveNet Voices">
+                            {/* <optgroup label="Google Gemini/WaveNet Voices">
                                 {geminiVoices.map(voice => (
                                     <option key={voice.id} value={voice.id}>
                                         {voice.name} - {voice.description}
                                     </option>
                                 ))}
-                            </optgroup>
+                            </optgroup> */}
                         </select>
                         <p className="voice-selection-help">
                             Choose a voice for narration. This will be used for all scenes.
