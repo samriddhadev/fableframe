@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { ImagePlus, Mic, Film, PlayCircle, PlusCircle, Trash2, X, Video, FileVideo, ChevronDown, ChevronUp, Wand2, Eye, Check, Settings, RotateCcw } from 'lucide-react';
+import { ImagePlus, Mic, Film, PlayCircle, PlusCircle, Trash2, X, Video, FileVideo, ChevronDown, ChevronUp, Wand2, Eye, Check, Settings, RotateCcw, Upload } from 'lucide-react';
 import './App.css';
 import './AnimationModal.css';
 import './ImageGenerationModal.css';
+import './MicrophoneRecorder.css';
 import SoundMixerModal from './SoundMixerModal';
 import MultiFrameAnimationModal from './MultiFrameAnimationModal';
+import MicrophoneRecorder from './MicrophoneRecorder';
 import { ToastProvider, useToast } from './Toast';
 
 import { kenBurnsFilterExpression, 
@@ -16,6 +18,7 @@ import { kenBurnsFilterExpression,
 const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, selectedVoice, storyId, isAnySceneGenerating, setIsAnySceneGenerating, isMergingFinalVideo, allScenes }) => {
     const { toast } = useToast();
     const [uploadedImage, setUploadedImage] = useState(null);
+    const [uploadedAudio, setUploadedAudio] = useState(null);
     const [audioGenerated, setAudioGenerated] = useState(false);
     const [videoGenerated, setVideoGenerated] = useState(false);
     const [showPreview, setShowPreview] = useState(false);
@@ -69,11 +72,17 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
         }
 
         // Restore audio state
-        if (scene.hasAudio && scene.audioUrl) {
-            console.log(`Scene ${index + 1} - Restoring audio state`);
+        if (scene.uploadedAudio) {
+            console.log(`Scene ${index + 1} - Restoring uploaded audio:`, scene.uploadedAudio);
+            setUploadedAudio(scene.uploadedAudio);
+            setAudioGenerated(true);
+            setGeneratedAudioUrl(scene.uploadedAudio);
+        } else if (scene.hasAudio && scene.audioUrl) {
+            console.log(`Scene ${index + 1} - Restoring generated audio state`);
             setAudioGenerated(true);
             setGeneratedAudioUrl(scene.audioUrl);
         } else {
+            setUploadedAudio(null);
             setAudioGenerated(false);
             setGeneratedAudioUrl(null);
         }
@@ -506,6 +515,81 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
         }
     };
 
+    const handleAudioUpload = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            // Convert audio to base64 and upload as JSON
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const base64Audio = e.target.result;
+                const base64Data = base64Audio.split(',')[1]; // Remove data:audio/*;base64, prefix
+
+                // Upload audio to server as JSON
+                fetch('http://localhost:8000/upload/audio', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        story_id: storyId,
+                        scene_id: String(scene.id),
+                        audio: base64Data,
+                        filename: file.name,
+                        mimetype: file.type
+                    })
+                })
+                    .then(response => response.json())
+                    .then(result => {
+                        if (result.success) {
+                            const audioUrl = `http://localhost:8000/files/${storyId}/audios/${result.filename}`;
+                            setUploadedAudio(audioUrl);
+                            setAudioGenerated(true);
+                            setGeneratedAudioUrl(audioUrl);
+                            onUpdate(index, { 
+                                ...scene, 
+                                uploadedAudio: audioUrl, 
+                                audioFilename: result.filename,
+                                hasAudio: true,
+                                audioUrl: audioUrl
+                            });
+                            toast.success('Audio Uploaded', 'Audio uploaded successfully!');
+                        } else {
+                            throw new Error(result.error || 'Upload failed');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error uploading audio:', error);
+                        toast.error('Upload Failed', 'Failed to upload audio: ' + error.message);
+                        // Fallback: use local base64 data
+                        setUploadedAudio(base64Audio);
+                        setAudioGenerated(true);
+                        setGeneratedAudioUrl(base64Audio);
+                        onUpdate(index, { 
+                            ...scene, 
+                            uploadedAudio: base64Audio,
+                            hasAudio: true,
+                            audioUrl: base64Audio
+                        });
+                    });
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const handleRecordedAudio = (audioUrl, filename) => {
+        // Handle recorded audio from MicrophoneRecorder component
+        setUploadedAudio(audioUrl);
+        setAudioGenerated(true);
+        setGeneratedAudioUrl(audioUrl);
+        onUpdate(index, { 
+            ...scene, 
+            uploadedAudio: audioUrl, 
+            audioFilename: filename,
+            hasAudio: true,
+            audioUrl: audioUrl
+        });
+    };
+
     const generateAudio = async () => {
         // Generate audio via API call
         const voiceToUse = selectedVoice || 'alloy';
@@ -517,6 +601,7 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
             setIsAnySceneGenerating(true); // Block global operations
             setAudioGenerated(false);
             setGeneratedAudioUrl(null);
+            setUploadedAudio(null); // Clear any uploaded audio when generating new audio
 
             const response = await fetch('http://localhost:8000/generate/audio', {
                 method: 'POST',
@@ -550,7 +635,8 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                         audioUrl: audioUrl,
                         audioFilename: result.filename,
                         storyId: storyId,
-                        audioDuration: result.duration
+                        audioDuration: result.duration,
+                        uploadedAudio: null // Clear uploaded audio when generating new audio
                     });
                     toast.success(
                         `Audio Generated Successfully! 🎵`,
@@ -709,8 +795,12 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
     };
 
     const showVideoGenerationModal = () => {
-        if (!scene.text || !uploadedImage) {
-            toast.warning('Requirements Missing', 'Please add both text and image before generating video.');
+        if (!scene.text || !uploadedImage || !audioGenerated) {
+            const missing = [];
+            if (!scene.text) missing.push('text');
+            if (!uploadedImage) missing.push('image');
+            if (!audioGenerated) missing.push('audio');
+            toast.warning('Requirements Missing', `Please add ${missing.join(', ')} before generating video.`);
             return;
         }
         setShowAnimationModal(true);
@@ -753,7 +843,7 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                                 Image: {uploadedImage ? '✓' : '○'}
                             </span>
                             <span style={{ color: audioGenerated ? '#667eea' : '#ccc', fontSize: '0.8rem', marginRight: '0.5rem' }}>
-                                Audio: {audioGenerated ? '✓' : '○'}
+                                Audio: {audioGenerated ? (uploadedAudio ? '📁' : '🎤') : '○'}
                             </span>
                             <span style={{ color: videoGenerated ? '#667eea' : '#ccc', fontSize: '0.8rem' }}>
                                 Video: {videoGenerated ? '✓' : '○'}
@@ -799,6 +889,14 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                                 id={`image-upload-${index}`}
                                 disabled={isGeneratingAudio || isGeneratingVideo || isAnySceneGenerating || isMergingFinalVideo}
                             />
+                            <input
+                                type="file"
+                                accept="audio/*"
+                                onChange={handleAudioUpload}
+                                className="file-input"
+                                id={`audio-upload-${index}`}
+                                disabled={isGeneratingAudio || isGeneratingVideo || isAnySceneGenerating || isMergingFinalVideo}
+                            />
                             <button
                                 className={`control-button upload-button ${(isGeneratingAudio || isGeneratingVideo || isAnySceneGenerating || isMergingFinalVideo) ? 'disabled' : ''}`}
                                 onClick={() => document.getElementById(`image-upload-${index}`).click()}
@@ -820,6 +918,24 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                             </button>
 
                             <button
+                                className={`control-button upload-button ${(isGeneratingAudio || isGeneratingVideo || isAnySceneGenerating || isMergingFinalVideo) ? 'disabled' : ''}`}
+                                onClick={() => document.getElementById(`audio-upload-${index}`).click()}
+                                title="Upload Audio File"
+                                disabled={isGeneratingAudio || isGeneratingVideo || isAnySceneGenerating || isMergingFinalVideo}
+                            >
+                                <Upload size={18} />
+                                <span>Upload Audio</span>
+                            </button>
+
+                            <MicrophoneRecorder
+                                onAudioRecorded={handleRecordedAudio}
+                                disabled={isGeneratingAudio || isGeneratingVideo || isAnySceneGenerating || isMergingFinalVideo}
+                                storyId={storyId}
+                                sceneId={scene.id}
+                                className="scene-microphone-recorder"
+                            />
+
+                            <button
                                 className={`control-button audio-button ${isGeneratingAudio ? 'loading' : ''}`}
                                 onClick={generateAudio}
                                 title={isGeneratingAudio ? "Generating Audio..." : "Generate Audio"}
@@ -838,8 +954,8 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
                             <button
                                 className={`control-button video-button ${isGeneratingVideo ? 'loading' : ''}`}
                                 onClick={showVideoGenerationModal}
-                                title={isGeneratingVideo ? "Generating Video..." : "Generate Video"}
-                                disabled={!scene.text || !uploadedImage || isGeneratingAudio || isGeneratingVideo || isAnySceneGenerating || isMergingFinalVideo}
+                                title={isGeneratingVideo ? "Generating Video..." : "Generate Video (requires text, image, and audio)"}
+                                disabled={!scene.text || !uploadedImage || !audioGenerated || isGeneratingAudio || isGeneratingVideo || isAnySceneGenerating || isMergingFinalVideo}
                             >
                                 {isGeneratingVideo ? (
                                     <div className="spinner" />

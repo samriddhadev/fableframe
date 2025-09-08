@@ -281,10 +281,9 @@ button:focus-visible {
   flex-direction: row;
   gap: 0.6rem;
   margin-top: 1rem;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   justify-content: flex-start;
-  align-items: center;
-  overflow-x: auto;
+  align-items: flex-start;
   padding-bottom: 0.2rem;
 }
 
@@ -774,8 +773,8 @@ button:focus-visible {
     flex-direction: row;
     gap: 0.4rem;
     justify-content: flex-start;
-    flex-wrap: nowrap;
-    overflow-x: auto;
+    flex-wrap: wrap;
+    align-items: flex-start;
   }
   
   .control-button {

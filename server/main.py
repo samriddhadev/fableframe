@@ -203,6 +203,44 @@ async def upload_image(request: Request):
     print(f"Image saved to {image_path}")
     return {"success": True, "filename": f"{scene_id}.png"}
 
+@app.post("/upload/audio")
+async def upload_audio(request: Request):
+    data = await request.json()
+    story_id = data.get("story_id")
+    scene_id = data.get("scene_id")
+    audio = data.get("audio")
+    filename = data.get("filename")
+    mimetype = data.get("mimetype", "audio/mpeg")
+    
+    if not story_id or not scene_id or not audio:
+        raise HTTPException(status_code=400, detail="story_id, scene_id, and audio are required")
+    
+    audio_bytes = base64.b64decode(extract_base64_from_data_url(audio))
+    data_dir = Path(os.getenv("DATA_DIR", "/story")) / story_id
+    audio_dir = data_dir / "audios"
+    audio_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Determine file extension based on mimetype or filename
+    file_ext = ".mp3"  # default
+    if filename:
+        file_ext = os.path.splitext(filename)[1] or file_ext
+    elif "wav" in mimetype:
+        file_ext = ".wav"
+    elif "ogg" in mimetype:
+        file_ext = ".ogg"
+    elif "m4a" in mimetype:
+        file_ext = ".m4a"
+    
+    audio_path = audio_dir / f"{scene_id}{file_ext}"
+    if audio_path.exists():
+        os.remove(audio_path)
+    
+    with open(audio_path, "wb") as audio_file:
+        audio_file.write(audio_bytes)
+    
+    print(f"Audio saved to {audio_path}")
+    return {"success": True, "filename": f"{scene_id}{file_ext}"}
+
 @app.post("/generate/image", response_model=ImageGenerationResponse)
 async def generate_image(request: ImageGenerationRequest):
     """

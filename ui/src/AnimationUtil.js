@@ -95,7 +95,7 @@ export const kenBurnsFilterExpression = (settings, duration, width, height, fps)
         ['pan-left', 'pan-right', 'pan-up', 'pan-down'].includes(directions[0])
     ) {
         d = frames;
-        let scaleMultiplier = 0.5; // default slight zoom if no zoom specifiedss
+        let scaleMultiplier = 0.2; // default slight zoom if no zoom specifiedss
         if (endScale !== startScale && endScale > startScale) {
             scaleMultiplier = endScale - startScale;
         }

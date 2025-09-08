@@ -1,0 +1,270 @@
+/* Microphone Recorder Component Styles */
+.microphone-recorder {
+    margin: 0.5rem 0;
+}
+
+.scene-microphone-recorder {
+    width: 100%;
+    max-width: none;
+    flex-basis: 100%;
+    order: 10;
+}
+
+.recorder-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.record-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.5rem 0.8rem;
+    min-height: 36px;
+    max-width: 142px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 0.8rem;
+    font-weight: 500;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    position: relative;
+    overflow: hidden;
+    white-space: nowrap;
+    flex-shrink: 0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.record-button:hover:not(:disabled) {
+    background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.record-button:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.record-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.beta-tag {
+    background: #fbbf24;
+    color: #92400e;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    margin-left: auto;
+    text-shadow: none;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.recording-active {
+    background: #fef2f2;
+    border: 2px dashed #ef4444;
+    border-radius: 12px;
+    padding: 1rem;
+    animation: pulse-border 2s infinite;
+}
+
+@keyframes pulse-border {
+    0%, 100% { border-color: #ef4444; }
+    50% { border-color: #f87171; }
+}
+
+.recording-status {
+    margin-bottom: 0.75rem;
+}
+
+.recording-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    color: #dc2626;
+}
+
+.recording-dot {
+    width: 12px;
+    height: 12px;
+    background: #ef4444;
+    border-radius: 50%;
+    animation: pulse-dot 1.5s infinite;
+}
+
+@keyframes pulse-dot {
+    0%, 100% { 
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% { 
+        opacity: 0.5;
+        transform: scale(1.2);
+    }
+}
+
+.recording-controls {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.pause-button, .resume-button, .stop-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.5rem 0.8rem;
+    min-height: 36px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 0.8rem;
+    font-weight: 500;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    position: relative;
+    overflow: hidden;
+    white-space: nowrap;
+    flex-shrink: 0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    min-width: 80px;
+}
+
+.pause-button:hover, .resume-button:hover {
+    background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.stop-button {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+}
+
+.stop-button:hover {
+    background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.playback-controls {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1rem;
+}
+
+.recorded-audio-info {
+    text-align: center;
+    margin-bottom: 0.75rem;
+    font-weight: 500;
+    color: #475569;
+}
+
+.playback-buttons {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.play-button, .reset-button, .upload-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.5rem 0.8rem;
+    min-height: 36px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 0.8rem;
+    font-weight: 500;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    position: relative;
+    overflow: hidden;
+    white-space: nowrap;
+    flex-shrink: 0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    min-width: 100px;
+}
+
+.play-button:hover:not(:disabled) {
+    background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.reset-button {
+    background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+}
+
+.reset-button:hover:not(:disabled) {
+    background: linear-gradient(135deg, #4b5563 0%, #6b7280 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.upload-button {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.upload-button:hover:not(:disabled) {
+    background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.upload-button.loading {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.upload-button.loading::after {
+    content: '';
+    width: 12px;
+    height: 12px;
+    border: 2px solid transparent;
+    border-top: 2px solid white;
+    border-radius: 50%;
+    margin-left: 0.5rem;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Mobile Responsive */
+@media (max-width: 640px) {
+    .recording-controls,
+    .playback-buttons {
+        gap: 0.5rem;
+    }
+    
+    .recording-controls > *,
+    .playback-buttons > * {
+        flex: 1;
+        min-width: 80px;
+    }
+    
+    .record-button {
+        width: 100%;
+    }
+}
