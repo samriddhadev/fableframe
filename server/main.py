@@ -3,6 +3,7 @@ from module.video import create_video_with_ffmpeg, merge_videos, create_video_wi
 from module.image import generate_scene_image
 from module.text import generate_text
 from module.util import extract_base64_from_data_url
+from module.audio_enhance import enhance_audio, get_audio_analysis
 
 import os
 import base64
@@ -100,6 +101,18 @@ class AudioGenerationResponse(BaseModel):
     success: bool
     audio_url: str
     duration: float
+
+class AudioEnhancementRequest(BaseModel):
+    story_id: str
+    scene_id: str
+    audio_filename: str
+    settings: Dict[str, Any]
+
+class AudioEnhancementResponse(BaseModel):
+    success: bool
+    filename: str
+    message: str = ""
+    analysis: Dict[str, Any] = {}
 
 class VideoGenerationResponse(BaseModel):
     success: bool
@@ -324,6 +337,66 @@ async def generate_audio(request: AudioGenerationRequest):
         print(f"Audio generation failed: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Audio generation failed: {str(e)}")
+
+@app.post("/enhance/audio", response_model=AudioEnhancementResponse)
+async def enhance_audio_endpoint(request: AudioEnhancementRequest):
+    """
+    Enhance audio with various processing options like EQ, noise reduction, effects, etc.
+
+    Args:
+        request: AudioEnhancementRequest containing audio file info and enhancement settings
+
+    Returns:
+        AudioEnhancementResponse with enhanced audio file information
+    """
+    try:
+        if not request.story_id or not request.scene_id or not request.audio_filename:
+            raise HTTPException(
+                status_code=400, 
+                detail="story_id, scene_id, and audio_filename are required"
+            )
+
+        data_dir = Path(os.getenv("DATA_DIR", "/story")) / request.story_id / "audios"
+        input_audio_path = data_dir / request.audio_filename
+        
+        if not input_audio_path.exists():
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Audio file not found: {request.audio_filename}"
+            )
+
+        # Generate enhanced filename
+        base_name = Path(request.audio_filename).stem
+        enhanced_filename = f"enhanced_{base_name}.mp3"
+        output_audio_path = data_dir / enhanced_filename
+
+        # Get audio analysis
+        analysis = get_audio_analysis(str(input_audio_path))
+
+        # Enhance the audio
+        enhance_audio(
+            str(input_audio_path), 
+            str(output_audio_path), 
+            request.settings
+        )
+
+        return AudioEnhancementResponse(
+            success=True,
+            filename=enhanced_filename,
+            message="Audio enhanced successfully",
+            analysis=analysis
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Audio enhancement failed: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Audio enhancement failed: {str(e)}"
+        )
 
 @app.post("/generate/video", response_model=VideoGenerationResponse)
 async def generate_video(request: VideoGenerationRequest):

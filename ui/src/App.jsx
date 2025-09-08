@@ -4,9 +4,11 @@ import './App.css';
 import './AnimationModal.css';
 import './ImageGenerationModal.css';
 import './MicrophoneRecorder.css';
+import './AudioEnhancer.css';
 import SoundMixerModal from './SoundMixerModal';
 import MultiFrameAnimationModal from './MultiFrameAnimationModal';
 import MicrophoneRecorder from './MicrophoneRecorder';
+import AudioEnhancer from './AudioEnhancer';
 import { ToastProvider, useToast } from './Toast';
 
 import { kenBurnsFilterExpression, 
@@ -578,6 +580,20 @@ const Scene = ({ scene, index, onUpdate, onRemove, globalVoiceInstructions, sele
 
     const handleRecordedAudio = (audioUrl, filename) => {
         // Handle recorded audio from MicrophoneRecorder component
+        setUploadedAudio(audioUrl);
+        setAudioGenerated(true);
+        setGeneratedAudioUrl(audioUrl);
+        onUpdate(index, { 
+            ...scene, 
+            uploadedAudio: audioUrl, 
+            audioFilename: filename,
+            hasAudio: true,
+            audioUrl: audioUrl
+        });
+    };
+
+    const handleEnhancedAudio = (audioUrl, filename) => {
+        // Handle enhanced audio from AudioEnhancer component
         setUploadedAudio(audioUrl);
         setAudioGenerated(true);
         setGeneratedAudioUrl(audioUrl);
