@@ -57,18 +57,6 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
-.beta-tag {
-    background: #fbbf24;
-    color: #92400e;
-    font-size: 0.7rem;
-    font-weight: 700;
-    padding: 0.2rem 0.4rem;
-    border-radius: 4px;
-    margin-left: auto;
-    text-shadow: none;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-}
-
 .recording-active {
     background: #fef2f2;
     border: 2px dashed #ef4444;

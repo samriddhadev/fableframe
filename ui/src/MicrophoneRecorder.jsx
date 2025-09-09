@@ -259,10 +259,26 @@ const MicrophoneRecorder = ({
                         onClick={startRecording}
                         disabled={disabled}
                         title="Start Recording (Beta)"
+                        style={{
+                            position: 'relative',
+                            overflow: 'hidden'
+                        }}
                     >
                         <Mic size={18} />
                         <span>Record Audio</span>
-                        <span className="beta-tag">BETA</span>
+                        <div style={{
+                            position: 'absolute',
+                            top: '-2px',
+                            right: '-2px',
+                            background: '#e74c3c',
+                            color: 'white',
+                            fontSize: '0.6rem',
+                            padding: '1px 4px',
+                            borderRadius: '3px',
+                            fontWeight: 'bold'
+                        }}>
+                            BETA
+                        </div>
                     </button>
                 )}
 
